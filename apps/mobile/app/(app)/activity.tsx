@@ -1,6 +1,7 @@
+import { useHeaderHeight } from '@react-navigation/elements';
 import { useFocusEffect, useNavigation, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { Animated, Platform, StyleSheet, View } from 'react-native';
 
 import type { ActivityFilter, Transaction } from '@/components/activity/types';
 
@@ -13,6 +14,7 @@ import { listTransactions } from '@/lib/transactions-storage';
 
 export default function ActivityScreen() {
   const { colors } = useTheme();
+  const headerHeight = useHeaderHeight();
   const navigation = useNavigation();
   const router = useRouter();
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -39,10 +41,11 @@ export default function ActivityScreen() {
         <CollapsibleHeaderTitle
           title='Activity'
           scrollY={scrollY}
+          topInset={headerHeight}
         />
       ),
     });
-  }, [navigation, scrollY]);
+  }, [headerHeight, navigation, scrollY]);
 
   const filtered = useMemo(() => {
     if (filter === 'all') return txs;
@@ -75,8 +78,14 @@ export default function ActivityScreen() {
         showsVerticalScrollIndicator={false}
         sections={sections}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        contentInsetAdjustmentBehavior='automatic'
+        contentContainerStyle={[
+          styles.list,
+          Platform.OS !== 'ios' ? { paddingTop: headerHeight } : null,
+        ]}
+        contentInsetAdjustmentBehavior='never'
+        contentInset={Platform.OS === 'ios' ? { top: headerHeight } : undefined}
+        contentOffset={Platform.OS === 'ios' ? { x: 0, y: -headerHeight } : undefined}
+        scrollIndicatorInsets={Platform.OS === 'ios' ? { top: headerHeight } : undefined}
         stickySectionHeadersEnabled
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
           useNativeDriver: true,

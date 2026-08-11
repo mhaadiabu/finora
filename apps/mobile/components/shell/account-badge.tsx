@@ -71,15 +71,16 @@ export function HeaderTitleWithAccount({ title }: HeaderTitleProps) {
 export function CollapsibleHeaderTitle({
   title,
   scrollY,
-}: HeaderTitleProps & { scrollY: Animated.Value }) {
+  topInset = 0,
+}: HeaderTitleProps & { scrollY: Animated.Value; topInset?: number }) {
   const { colors } = useTheme();
   const titleOpacity = scrollY.interpolate({
-    inputRange: [28, 72],
+    inputRange: [28 - topInset, 72 - topInset],
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
   const titleTranslateY = scrollY.interpolate({
-    inputRange: [28, 72],
+    inputRange: [28 - topInset, 72 - topInset],
     outputRange: [5, 0],
     extrapolate: 'clamp',
   });

@@ -1,7 +1,8 @@
+import { useHeaderHeight } from '@react-navigation/elements';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, type Href } from 'expo-router';
 import { useEffect, useState, useMemo } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { SupportedCurrency } from '@/components/ui/currency-icon';
 import { Icon } from '@/components/ui/icon';
@@ -22,6 +23,7 @@ import { listVirtualCards, subscribeVirtualCards } from '@/lib/virtual-cards-sto
 
 export default function WalletsScreen() {
   const { colors } = useTheme();
+  const headerHeight = useHeaderHeight();
   const router = useRouter();
   const accountType = getAccountType();
   const accountLabel = getAccountLabel(accountType);
@@ -134,7 +136,9 @@ export default function WalletsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Sleek Floating Toast */}
       {toastMessage && (
-        <View style={[styles.toast, { backgroundColor: colors.foreground }]}>
+        <View
+          style={[styles.toast, { backgroundColor: colors.foreground, top: headerHeight + 12 }]}
+        >
           <Icon
             name='check'
             size={13}
@@ -146,8 +150,14 @@ export default function WalletsScreen() {
 
       <Animated.SectionList
         showsVerticalScrollIndicator={false}
-        contentInsetAdjustmentBehavior='automatic'
-        contentContainerStyle={styles.scrollContent}
+        contentInsetAdjustmentBehavior='never'
+        contentInset={Platform.OS === 'ios' ? { top: headerHeight } : undefined}
+        contentOffset={Platform.OS === 'ios' ? { x: 0, y: -headerHeight } : undefined}
+        scrollIndicatorInsets={Platform.OS === 'ios' ? { top: headerHeight } : undefined}
+        contentContainerStyle={[
+          styles.scrollContent,
+          Platform.OS !== 'ios' ? { paddingTop: headerHeight + 16 } : null,
+        ]}
         sections={walletSections}
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled
@@ -265,7 +275,6 @@ const styles = StyleSheet.create({
   },
   toast: {
     position: 'absolute',
-    top: 12,
     alignSelf: 'center',
     zIndex: 99,
     flexDirection: 'row',
