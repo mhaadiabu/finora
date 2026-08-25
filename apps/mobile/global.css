@@ -32,7 +32,6 @@
   --font-sans: 'DMSans_400Regular';
   --font-sans-medium: 'DMSans_500Medium';
   --font-sans-semibold: 'DMSans_600SemiBold';
-  --font-display: 'Fraunces_600SemiBold';
 }
 
 /* `border` represented StyleSheet.hairlineWidth before the migration. */
