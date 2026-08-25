@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Finora mobile'
+  short_description: 'Expo SDK 54 and native assistant-ui routing'
+  default_prompt: 'Use $finora-mobile to work safely in the Finora Expo SDK 54 app.'

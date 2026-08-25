@@ -1,6 +1,6 @@
 ---
 name: runtime
-description: 'Guide to the assistant-ui runtime system, single-thread state, and the imperative runtime API in @assistant-ui/react. Use when creating a runtime (useLocalRuntime with a ChatModelAdapter, useExternalStoreRuntime for Redux/Zustand, useRemoteThreadListRuntime), wiring AssistantRuntimeProvider, or reading/mutating thread, message, and composer state and events. Covers the unified hooks useAui, useAuiState, useAuiEvent (composer.send, thread.runStart, thread.runEnd), legacy hooks (useAssistantRuntime, useThreadRuntime, useMessageRuntime, useComposerRuntime, useThread, useThreadMessages), the AssistantRuntime/ThreadRuntime/MessageRuntime/ComposerRuntime hierarchy, thread operations (append, cancelRun, message().edit/reload), capabilities, and types (ThreadMessage, MessagePart, MessageStatus, ChatModelRunResult). Use for provider "Cannot read property of undefined" errors or state not updating. For multi-thread list UI and switching between conversations use thread-list instead.'
+description: 'Runtime state and imperative aui client guidance for assistant-ui React applications. Covers local, external, and remote thread runtimes, AssistantRuntimeProvider, useAui and useAuiState, current v0.15 scope accessors, adapters, capabilities, and migration from legacy hooks. Use for provider or state-update errors. For multi-thread UI use thread-list.'
 license: MIT
 ---
 
@@ -50,7 +50,7 @@ function ChatControls() {
     <div>
       <button
         onClick={() =>
-          api.thread().append({
+          api.thread.append({
             role: 'user',
             content: [{ type: 'text', text: 'Hello!' }],
           })
@@ -58,57 +58,116 @@ function ChatControls() {
       >
         Send
       </button>
-      {isRunning && <button onClick={() => api.thread().cancelRun()}>Cancel</button>}
+      {isRunning && <button onClick={() => api.thread.cancelRun()}>Cancel</button>}
     </div>
   );
 }
 ```
 
+## Scope Accessors Are Properties
+
+As of 0.15, `aui.<scope>` is a property, not a call. Calling it still works but is deprecated. Methods _on_ a scope keep their parentheses.
+
+```tsx
+const aui = useAui();
+
+aui.thread.getState(); // property accessor
+aui.threads.switchToNewThread();
+aui.thread.composer().send(); // composer() is a method of the thread scope
+aui.thread.message({ index: 0 }); // selector object, not a bare index
+```
+
+Selecting an unavailable scope no longer throws; `aui.message` is always truthy. Check availability before use:
+
+```tsx
+if (aui.message.source != null) {
+  aui.message.reload();
+}
+```
+
+`source`, `query`, and `name` are reserved accessor properties and never resolve to scope methods.
+
 ## Thread Operations
 
 ```tsx
-const api = useAui();
-const thread = api.thread();
+const aui = useAui();
+const thread = aui.thread;
 
 thread.append({ role: 'user', content: [{ type: 'text', text: 'Hello' }] });
-
+thread.startRun({ parentId: null });
 thread.cancelRun();
 
-const state = thread.getState(); // { messages, isRunning, ... }
+const state = thread.getState(); // { messages, isRunning, capabilities, composer, ... }
 ```
 
 ## Message Operations
 
-```tsx
-const message = api.thread().message(0);
+`message()` takes a selector object of `{ index }` or `{ id }`.
 
-message.edit({ role: 'user', content: [{ type: 'text', text: 'Updated' }] });
+```tsx
+const message = aui.thread.message({ index: 0 });
+
 message.reload();
+message.switchToBranch({ position: 'next' });
+message.submitFeedback({ type: 'positive' });
+
+// Editing goes through the message's edit composer
+const editComposer = message.composer();
+editComposer.beginEdit();
+editComposer.setText('Updated');
+editComposer.send();
 ```
 
 ## Events
 
+Almost every event is now deprecated as state-derivable: derive from `useAuiState` instead of listening.
+
 ```tsx
-useAuiEvent('thread.runStart', () => {});
-useAuiEvent('thread.runEnd', () => {});
-useAuiEvent('composer.send', ({ threadId }) => {
-  console.log('Sent in thread:', threadId);
-});
-useAuiEvent('thread.modelContextUpdate', () => {});
+// Preferred: derive from state
+const isRunning = useAuiState((s) => s.thread.isRunning);
+
+// Still non-deprecated
+useAuiEvent('thread.modelContextUpdate', ({ threadId }) => {});
+useAuiEvent('composer.attachmentAddError', (e) => {});
+```
+
+| Event                                                      | Status                                                     |
+| ---------------------------------------------------------- | ---------------------------------------------------------- |
+| `thread.modelContextUpdate`                                | Current (model context lives in a provider, not in state)  |
+| `composer.attachmentAddError`                              | Current                                                    |
+| `composer.send`, `composer.attachmentAdd`                  | Deprecated: observe composer `text` / `attachments`        |
+| `thread.runStart`, `thread.runEnd`                         | Deprecated: observe `s.thread.isRunning`                   |
+| `thread.initialize`                                        | Deprecated: observe `s.thread.messages` becoming non-empty |
+| `threadListItem.switchedTo`, `threadListItem.switchedAway` | Deprecated: compare `s.threads.mainThreadId`               |
+
+## Optional Scopes
+
+`s.optional.<scope>` resolves to `undefined` instead of throwing when a scope is not mounted, which is the safe way to read a scope from a component that renders both inside and outside it:
+
+```tsx
+const partType = useAuiState((s) => s.optional.part?.type);
 ```
 
 ## Capabilities
 
 ```tsx
 const caps = useAuiState((s) => s.thread.capabilities);
-// { cancel, edit, reload, copy, speak, attachments }
 ```
+
+`RuntimeCapabilities`: `switchToBranch`, `switchBranchDuringRun`, `edit`, `reload`, `delete`, `cancel`, `unstable_copy`, `speech`, `dictation`, `voice`, `attachments`, `feedback`, `queue`. Note `unstable_copy` and `speech`, not `copy` and `speak`.
+
+Runtimes derive most of these from what you supply (a callback, an adapter) rather than from an explicit option.
 
 ## Common Gotchas
 
 **"Cannot read property of undefined"**
 
 - Ensure hooks are called inside `AssistantRuntimeProvider`
+- For a scope that may not be mounted, read `s.optional.<scope>` or guard on `aui.<scope>.source != null`
+
+**A legacy hook import fails to resolve**
+
+- `useAssistantRuntime`, `useThreadRuntime`, `useThread`, `useMessage`, `useComposer`, `useMessagePart`, `useAttachment`, `useThreadListItem`, `useThreadList` and friends were removed in 0.15. See the `/update` skill for the mapping table.
 
 **State not updating**
 

@@ -1,6 +1,6 @@
 ---
 name: primitives
-description: 'Builds and customizes assistant-ui chat UI from composable, unstyled @assistant-ui/react primitives that follow Radix-style part composition. Use when assembling or styling a custom Thread, Composer, message rendering, action bar, or branch picker from building blocks: ThreadPrimitive (.Root, .Viewport, .Messages, .Empty, .ScrollToBottom), ComposerPrimitive (.Input, .Send, .Cancel, .Attachments), MessagePrimitive (.Parts/.Content, .Error), ActionBarPrimitive (.Copy, .Edit, .Reload, .Speak, feedback, .ExportMarkdown), BranchPickerPrimitive, AttachmentPrimitive, ThreadListPrimitive, ThreadListItemPrimitive. Covers MessagePrimitive.Parts children render functions for text, image, reasoning, and tool-call parts; conditional rendering with AuiIf (deprecated .If); and gotchas like wrapping in AssistantRuntimeProvider and adding className since primitives ship unstyled. For prebuilt drop-in UI and scaffolding use setup; for multi-thread sidebar behavior use thread-list.'
+description: 'Build and customize assistant-ui chat UI from unstyled React primitives. Covers Thread, Composer, Message, action bar, branch picker, attachment, thread-list, generative UI, part grouping, AuiIf, and children render functions. Use for custom chat surfaces. For Expo, route to the repository mobile skill and use @assistant-ui/react-native types.'
 license: MIT
 ---
 
@@ -37,13 +37,18 @@ import {
 
 ## Primitive Parts
 
-| Primitive               | Key Parts                                                                                          |
-| ----------------------- | -------------------------------------------------------------------------------------------------- |
-| `ThreadPrimitive`       | `.Root`, `.Viewport`, `.Messages`, `.Empty`, `.ScrollToBottom`                                     |
-| `ComposerPrimitive`     | `.Root`, `.Input`, `.Send`, `.Cancel`, `.Attachments`                                              |
-| `MessagePrimitive`      | `.Root`, `.Parts`/`.Content`, `.If`, `.Error`                                                      |
-| `ActionBarPrimitive`    | `.Copy`, `.Edit`, `.Reload`, `.Speak`, `.FeedbackPositive`, `.FeedbackNegative`, `.ExportMarkdown` |
-| `BranchPickerPrimitive` | `.Previous`, `.Next`, `.Number`, `.Count`                                                          |
+| Primitive                 | Key Parts                                                                                                                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ThreadPrimitive`         | `.Root`, `.Viewport`, `.ViewportFooter`, `.Messages`, `.Empty`, `.ScrollToBottom`, `.Suggestions`, `.Suggestion`                                                                                        |
+| `ComposerPrimitive`       | `.Root`, `.Input`, `.Send`, `.Cancel`, `.Attachments`, `.AddAttachment`, `.AttachmentDropzone`, `.Quote`, `.QuoteText`, `.QuoteDismiss`, `.Dictate`, `.StopDictation`, `.DictationTranscript`, `.Queue` |
+| `MessagePrimitive`        | `.Root`, `.Parts` (`.Content` is a deprecated alias), `.GroupedParts`, `.Attachments`, `.Quote`, `.GenerativeUI`, `.Error`                                                                              |
+| `ActionBarPrimitive`      | `.Root`, `.Copy`, `.Edit`, `.Reload`, `.Speak`, `.StopSpeaking`, `.FeedbackPositive`, `.FeedbackNegative`, `.ExportMarkdown`                                                                            |
+| `BranchPickerPrimitive`   | `.Root`, `.Previous`, `.Next`, `.Number`, `.Count`                                                                                                                                                      |
+| `ThreadListPrimitive`     | `.Root`, `.New`, `.Items`, `.LoadMore`                                                                                                                                                                  |
+| `ThreadListItemPrimitive` | `.Root`, `.Trigger`, `.Title`, `.Archive`, `.Unarchive`, `.Delete`                                                                                                                                      |
+| `AttachmentPrimitive`     | `.Root`, `.Name`, `.Remove`, `.unstable_Thumb`                                                                                                                                                          |
+
+Also exported, each covered by its own reference or skill: `ChainOfThoughtPrimitive`, `SelectionToolbarPrimitive`, `SuggestionPrimitive`, `QueueItemPrimitive`, `ErrorPrimitive`, `MessagePartPrimitive`, `AssistantModalPrimitive`, `ActionBarMorePrimitive`, `ThreadListItemMorePrimitive`.
 
 ## Custom Thread Example
 
