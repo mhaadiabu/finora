@@ -20,6 +20,7 @@ import {
 import { fetch } from 'expo/fetch';
 
 import { canonicalizeRemoteChatHistory } from './remote-chat-history';
+import { userStorageKey } from './session-storage';
 
 const RESUMABLE_STREAM_ID_HEADER = 'x-resumable-stream-id';
 const BOOTSTRAP_TIMEOUT_MS = 5_000;
@@ -200,7 +201,7 @@ function latestCompletedAssistantBeforeUser(messages: UIMessage[]) {
 }
 
 function activeStreamStorageKey(chatId: string) {
-  return `finora:remote-chat:${chatId}:active-stream`;
+  return userStorageKey(`finora:remote-chat:${chatId}:active-stream`);
 }
 
 async function persistActiveStreamId(chatId: string, activeStreamId: string | null) {

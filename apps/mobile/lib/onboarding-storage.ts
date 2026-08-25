@@ -2,10 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { AccountType } from '@/lib/account';
 
+import { userStorageKey } from './session-storage';
+
 const KEYS = {
   completed: 'finora.onboarding.completed',
   accountType: 'finora.accountType',
 } as const;
+
+const key = (baseKey: (typeof KEYS)[keyof typeof KEYS]) => userStorageKey(baseKey);
 
 export type OnboardingState = {
   completed: boolean;
@@ -39,8 +43,8 @@ async function setItem(key: string, value: string): Promise<void> {
 
 export async function getOnboardingState(): Promise<OnboardingState> {
   const [completed, accountType] = await Promise.all([
-    getItem(KEYS.completed),
-    getItem(KEYS.accountType),
+    getItem(key(KEYS.completed)),
+    getItem(key(KEYS.accountType)),
   ]);
 
   return {
@@ -50,5 +54,8 @@ export async function getOnboardingState(): Promise<OnboardingState> {
 }
 
 export async function completeOnboarding(accountType: AccountType): Promise<void> {
-  await Promise.all([setItem(KEYS.completed, 'true'), setItem(KEYS.accountType, accountType)]);
+  await Promise.all([
+    setItem(key(KEYS.completed), 'true'),
+    setItem(key(KEYS.accountType), accountType),
+  ]);
 }

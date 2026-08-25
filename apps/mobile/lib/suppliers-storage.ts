@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { PayoutDestination } from '@/lib/employees-storage';
 
+import { userStorageKey } from './session-storage';
+
 export type Supplier = {
   id: string;
   name: string;
@@ -11,7 +13,8 @@ export type Supplier = {
   notes?: string;
 };
 
-const KEY = 'finora.suppliers.v1';
+const BASE_KEY = 'finora.suppliers.v1';
+const key = () => userStorageKey(BASE_KEY);
 const memory = new Map<string, string>();
 
 export const MOCK_SUPPLIERS: Supplier[] = [
@@ -63,9 +66,9 @@ async function setItem(key: string, value: string): Promise<void> {
 }
 
 export async function listSuppliers(): Promise<Supplier[]> {
-  const raw = await getItem(KEY);
+  const raw = await getItem(key());
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_SUPPLIERS));
+    await setItem(key(), JSON.stringify(MOCK_SUPPLIERS));
     return [...MOCK_SUPPLIERS];
   }
   try {
@@ -94,9 +97,9 @@ export async function findSupplierByName(query: string): Promise<Supplier | null
 }
 
 export async function clearSuppliers(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

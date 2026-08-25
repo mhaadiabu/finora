@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { userStorageKey } from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+
 export type SmsPaymentRequest = {
   id: string;
   fromName: string;
@@ -13,7 +16,8 @@ export type SmsPaymentRequest = {
   transactionId?: string;
 };
 
-const KEY = 'finora.sms-requests.v1';
+const BASE_KEY = 'finora.sms-requests.v1';
+const key = () => userStorageKey(BASE_KEY);
 const memory = new Map<string, string>();
 
 function hoursAgo(hours: number) {
@@ -74,9 +78,9 @@ async function setItem(key: string, value: string): Promise<void> {
 }
 
 export async function listSmsPaymentRequests(): Promise<SmsPaymentRequest[]> {
-  const raw = await getItem(KEY);
+  const raw = await getItem(key());
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_SMS_REQUESTS));
+    await setItem(key(), JSON.stringify(MOCK_SMS_REQUESTS));
     return [...MOCK_SMS_REQUESTS];
   }
   try {
@@ -98,27 +102,31 @@ export async function markSmsRequestPaid(
   id: string,
   transactionId: string,
 ): Promise<SmsPaymentRequest | null> {
-  const requests = await listSmsPaymentRequests();
-  const next = requests.map((request) =>
-    request.id === id ? { ...request, status: 'paid' as const, transactionId } : request,
-  );
-  await setItem(KEY, JSON.stringify(next));
-  return next.find((request) => request.id === id) ?? null;
+  return serializeStorageMutation(key(), async () => {
+    const requests = await listSmsPaymentRequests();
+    const next = requests.map((request) =>
+      request.id === id ? { ...request, status: 'paid' as const, transactionId } : request,
+    );
+    await setItem(key(), JSON.stringify(next));
+    return next.find((request) => request.id === id) ?? null;
+  });
 }
 
 export async function dismissSmsRequest(id: string): Promise<SmsPaymentRequest | null> {
-  const requests = await listSmsPaymentRequests();
-  const next = requests.map((request) =>
-    request.id === id ? { ...request, status: 'dismissed' as const } : request,
-  );
-  await setItem(KEY, JSON.stringify(next));
-  return next.find((request) => request.id === id) ?? null;
+  return serializeStorageMutation(key(), async () => {
+    const requests = await listSmsPaymentRequests();
+    const next = requests.map((request) =>
+      request.id === id ? { ...request, status: 'dismissed' as const } : request,
+    );
+    await setItem(key(), JSON.stringify(next));
+    return next.find((request) => request.id === id) ?? null;
+  });
 }
 
 export async function clearSmsRequests(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

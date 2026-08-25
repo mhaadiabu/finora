@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { userStorageKey } from './session-storage';
+
 export type BusinessExpense = {
   id: string;
   merchant: string;
@@ -11,7 +13,8 @@ export type BusinessExpense = {
   status: 'posted' | 'pending';
 };
 
-const KEY = 'finora.expenses.v1';
+const BASE_KEY = 'finora.expenses.v1';
+const key = () => userStorageKey(BASE_KEY);
 const memory = new Map<string, string>();
 
 function daysAgo(days: number) {
@@ -79,9 +82,9 @@ async function setItem(key: string, value: string): Promise<void> {
 }
 
 export async function listExpenses(): Promise<BusinessExpense[]> {
-  const raw = await getItem(KEY);
+  const raw = await getItem(key());
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_EXPENSES));
+    await setItem(key(), JSON.stringify(MOCK_EXPENSES));
     return [...MOCK_EXPENSES];
   }
   try {
@@ -93,9 +96,9 @@ export async function listExpenses(): Promise<BusinessExpense[]> {
 }
 
 export async function clearExpenses(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

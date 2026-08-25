@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { userStorageKey } from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+
 export type ApprovalPolicy = {
   id: string;
   name: string;
@@ -7,7 +10,8 @@ export type ApprovalPolicy = {
   enabled: boolean;
 };
 
-const KEY = 'finora.policies.v1';
+const BASE_KEY = 'finora.policies.v1';
+const key = () => userStorageKey(BASE_KEY);
 const memory = new Map<string, string>();
 
 export const MOCK_POLICIES: ApprovalPolicy[] = [
@@ -49,9 +53,9 @@ async function setItem(key: string, value: string): Promise<void> {
 }
 
 export async function listPolicies(): Promise<ApprovalPolicy[]> {
-  const raw = await getItem(KEY);
+  const raw = await getItem(key());
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_POLICIES));
+    await setItem(key(), JSON.stringify(MOCK_POLICIES));
     return [...MOCK_POLICIES];
   }
   try {
@@ -66,10 +70,12 @@ export async function setPolicyEnabled(
   id: string,
   enabled: boolean,
 ): Promise<ApprovalPolicy | null> {
-  const policies = await listPolicies();
-  const next = policies.map((p) => (p.id === id ? { ...p, enabled } : p));
-  await setItem(KEY, JSON.stringify(next));
-  return next.find((p) => p.id === id) ?? null;
+  return serializeStorageMutation(key(), async () => {
+    const policies = await listPolicies();
+    const next = policies.map((p) => (p.id === id ? { ...p, enabled } : p));
+    await setItem(key(), JSON.stringify(next));
+    return next.find((p) => p.id === id) ?? null;
+  });
 }
 
 export function simulatePolicy(
@@ -92,9 +98,9 @@ export function simulatePolicy(
 }
 
 export async function clearPolicies(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

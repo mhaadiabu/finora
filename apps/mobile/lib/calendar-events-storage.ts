@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { userStorageKey } from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+
 export type CalendarMoneyEventKind = 'rent' | 'payroll' | 'bill' | 'subscription' | 'other';
 
 export type CalendarMoneyEvent = {
@@ -15,7 +18,8 @@ export type CalendarMoneyEvent = {
   transactionId?: string;
 };
 
-const KEY = 'finora.calendar-events.v1';
+const BASE_KEY = 'finora.calendar-events.v1';
+const key = () => userStorageKey(BASE_KEY);
 const memory = new Map<string, string>();
 
 function daysFromNow(days: number, hour = 9) {
@@ -90,9 +94,9 @@ async function setItem(key: string, value: string): Promise<void> {
 }
 
 export async function listCalendarMoneyEvents(): Promise<CalendarMoneyEvent[]> {
-  const raw = await getItem(KEY);
+  const raw = await getItem(key());
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_CALENDAR_EVENTS));
+    await setItem(key(), JSON.stringify(MOCK_CALENDAR_EVENTS));
     return [...MOCK_CALENDAR_EVENTS];
   }
   try {
@@ -114,27 +118,31 @@ export async function markCalendarEventPaid(
   id: string,
   transactionId: string,
 ): Promise<CalendarMoneyEvent | null> {
-  const events = await listCalendarMoneyEvents();
-  const next = events.map((event) =>
-    event.id === id ? { ...event, status: 'paid' as const, transactionId } : event,
-  );
-  await setItem(KEY, JSON.stringify(next));
-  return next.find((event) => event.id === id) ?? null;
+  return serializeStorageMutation(key(), async () => {
+    const events = await listCalendarMoneyEvents();
+    const next = events.map((event) =>
+      event.id === id ? { ...event, status: 'paid' as const, transactionId } : event,
+    );
+    await setItem(key(), JSON.stringify(next));
+    return next.find((event) => event.id === id) ?? null;
+  });
 }
 
 export async function dismissCalendarEvent(id: string): Promise<CalendarMoneyEvent | null> {
-  const events = await listCalendarMoneyEvents();
-  const next = events.map((event) =>
-    event.id === id ? { ...event, status: 'dismissed' as const } : event,
-  );
-  await setItem(KEY, JSON.stringify(next));
-  return next.find((event) => event.id === id) ?? null;
+  return serializeStorageMutation(key(), async () => {
+    const events = await listCalendarMoneyEvents();
+    const next = events.map((event) =>
+      event.id === id ? { ...event, status: 'dismissed' as const } : event,
+    );
+    await setItem(key(), JSON.stringify(next));
+    return next.find((event) => event.id === id) ?? null;
+  });
 }
 
 export async function clearCalendarEvents(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

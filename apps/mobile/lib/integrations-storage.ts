@@ -2,7 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { isSmsAvailable } from '@/lib/sms';
 
-const KEY = 'finora.integrations.v1';
+import { userStorageKey } from './session-storage';
+
+const BASE_KEY = 'finora.integrations.v1';
+const key = () => userStorageKey(BASE_KEY);
 
 export type IntegrationsState = {
   gmailConnected: boolean;
@@ -44,7 +47,7 @@ async function setItem(key: string, value: string): Promise<void> {
 }
 
 async function readState(): Promise<IntegrationsState> {
-  const raw = await getItem(KEY);
+  const raw = await getItem(key());
   if (!raw) return { ...DEFAULT };
   try {
     const parsed = JSON.parse(raw) as Partial<IntegrationsState>;
@@ -59,7 +62,7 @@ async function readState(): Promise<IntegrationsState> {
 }
 
 async function writeState(next: IntegrationsState): Promise<IntegrationsState> {
-  await setItem(KEY, JSON.stringify(next));
+  await setItem(key(), JSON.stringify(next));
   return next;
 }
 
@@ -148,9 +151,9 @@ export async function disconnectSmsInbox(): Promise<IntegrationsState> {
 }
 
 export async function clearIntegrations(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

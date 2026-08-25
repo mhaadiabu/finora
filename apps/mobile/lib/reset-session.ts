@@ -20,6 +20,8 @@ import { clearSmsRequests } from '@/lib/sms-requests-storage';
 import { clearSuppliers } from '@/lib/suppliers-storage';
 import { clearTransactions } from '@/lib/transactions-storage';
 
+import { clearActiveUserStorage } from './session-storage';
+
 const KEYS = [
   'finora.auth.tagConfigured',
   'finora.auth.tagConfiguredUserId',
@@ -73,4 +75,5 @@ export async function resetFinoraSession(): Promise<void> {
   await clearSettings();
   await clearMemoryStore();
   setAccountType('personal');
+  await clearActiveUserStorage();
 }

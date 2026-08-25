@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '@/lib/api-url';
 import { getCachedSettings } from '@/lib/settings-storage';
 
+import { userStorageKey } from './session-storage';
+
 export type FinoraTagProfile = FinoraTagAccount & {
   initials: string;
 };
@@ -45,7 +47,8 @@ export function suggestFinoraTagFromName(name: string, email?: string) {
 
 /** Prefix search against the global directory never runs below this length. */
 export const FINORA_TAG_GLOBAL_MIN_CHARS = 3;
-const RECENT_KEY = 'finora.finora-tags.recent.v1';
+const BASE_RECENT_KEY = 'finora.finora-tags.recent.v1';
+const recentKey = () => userStorageKey(BASE_RECENT_KEY);
 const RECENT_LIMIT = 12;
 const SUGGESTION_LIMIT = 6;
 type GetToken = () => Promise<string | null>;
@@ -206,11 +209,11 @@ export async function lookupFinoraTag(value: string) {
 }
 
 export async function listRecentFinoraTags(): Promise<FinoraTagSuggestion[]> {
-  const raw = await getItem(RECENT_KEY);
+  const raw = await getItem(recentKey());
   let tags: string[] = [];
   if (!raw) {
     tags = [...SEED_RECENT_TAGS];
-    await setItem(RECENT_KEY, JSON.stringify(tags));
+    await setItem(recentKey(), JSON.stringify(tags));
   } else {
     try {
       const parsed = JSON.parse(raw) as string[];
@@ -260,7 +263,7 @@ export async function rememberFinoraTagRecipient(input: {
     0,
     RECENT_LIMIT,
   );
-  await setItem(RECENT_KEY, JSON.stringify(next));
+  await setItem(recentKey(), JSON.stringify(next));
 }
 
 /**
@@ -290,9 +293,9 @@ export async function searchFinoraTags(query: string): Promise<FinoraTagSuggesti
 }
 
 export async function clearRecentFinoraTags(): Promise<void> {
-  memory.delete(RECENT_KEY);
+  memory.delete(recentKey());
   try {
-    await AsyncStorage.removeItem(RECENT_KEY);
+    await AsyncStorage.removeItem(recentKey());
   } catch {
     // ignore
   }

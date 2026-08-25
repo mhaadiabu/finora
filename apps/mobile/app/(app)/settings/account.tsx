@@ -17,6 +17,7 @@ import { haptics } from '@/lib/haptics';
 import { completeOnboarding } from '@/lib/onboarding-storage';
 import { updateUserProfile } from '@/lib/profile-api';
 import { useSettings } from '@/lib/settings-context';
+import { signOutFinora } from '@/lib/sign-out';
 
 export default function AccountSettingsScreen() {
   const { colors } = useTheme();
@@ -58,7 +59,7 @@ export default function AccountSettingsScreen() {
         style: 'destructive',
         onPress: async () => {
           haptics.selection();
-          await signOut();
+          await signOutFinora(signOut);
           haptics.success();
           router.replace('/auth' as Href);
         },

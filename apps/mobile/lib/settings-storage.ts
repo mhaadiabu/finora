@@ -1,8 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getSystemLanguage } from './i18n';
+import { userStorageKey } from './session-storage';
+import { getActiveUserId } from './session-storage';
 
-const KEY = 'finora.settings.v1';
+const BASE_KEY = 'finora.settings.v1';
+const key = () => userStorageKey(BASE_KEY);
 
 const memory = new Map<string, string>();
 
@@ -98,6 +101,7 @@ export const DEFAULT_SETTINGS: FinoraSettings = {
 };
 
 let cached: FinoraSettings | null = null;
+let cachedUserId: string | null = null;
 let writeQueue: Promise<void> = Promise.resolve();
 const listeners = new Set<() => void>();
 
@@ -111,11 +115,12 @@ export function subscribeSettings(listener: () => void): () => void {
 }
 
 export function getCachedSettings(): FinoraSettings {
-  return cached ?? DEFAULT_SETTINGS;
+  return cachedUserId === getActiveUserId() ? (cached ?? DEFAULT_SETTINGS) : DEFAULT_SETTINGS;
 }
 
 export async function getSettings(): Promise<FinoraSettings> {
-  const raw = await getItem(KEY);
+  cachedUserId = getActiveUserId();
+  const raw = await getItem(key());
   if (!raw) {
     cached = { ...DEFAULT_SETTINGS, notifications: { ...DEFAULT_SETTINGS.notifications } };
     return cached;
@@ -151,7 +156,8 @@ export async function saveSettings(patch: Partial<FinoraSettings>): Promise<Fino
       trustedDevices: patch.trustedDevices ?? current.trustedDevices,
     };
     cached = next;
-    await setItem(KEY, JSON.stringify(next));
+    cachedUserId = getActiveUserId();
+    await setItem(key(), JSON.stringify(next));
     notify();
     return next;
   });
@@ -174,6 +180,7 @@ export async function revokeTrustedDevice(id: string): Promise<FinoraSettings> {
 
 export async function clearSettings(): Promise<void> {
   cached = null;
-  await removeItem(KEY);
+  cachedUserId = null;
+  await removeItem(key());
   notify();
 }

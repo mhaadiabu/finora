@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 
 import type { PaymentConfirmation } from '@/components/chat/PaymentConfirmationCard';
 import type { SupportedCurrency } from '@/components/ui/currency-icon';
@@ -11,7 +12,11 @@ import {
   type TransactionStatus,
 } from '@/components/activity/types';
 
-const KEY = 'finora.transactions.v1';
+import { userStorageKey } from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+
+const BASE_KEY = 'finora.transactions.v1';
+const key = () => userStorageKey(BASE_KEY);
 
 const memory = new Map<string, string>();
 
@@ -33,9 +38,9 @@ async function setItem(key: string, value: string): Promise<void> {
 }
 
 export async function listTransactions(): Promise<Transaction[]> {
-  const raw = await getItem(KEY);
+  const raw = await getItem(key());
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_TRANSACTIONS));
+    await setItem(key(), JSON.stringify(MOCK_TRANSACTIONS));
     return [...MOCK_TRANSACTIONS];
   }
   try {
@@ -52,11 +57,16 @@ export async function getTransaction(id: string): Promise<Transaction | null> {
 }
 
 export async function upsertTransaction(tx: Transaction): Promise<Transaction> {
-  const txs = await listTransactions();
-  const idx = txs.findIndex((t) => t.id === tx.id);
-  const next = idx >= 0 ? txs.map((t, i) => (i === idx ? tx : t)) : [tx, ...txs];
-  await setItem(KEY, JSON.stringify(next));
-  return tx;
+  return serializeStorageMutation(key(), async () => {
+    const txs = await listTransactions();
+    const idx = txs.findIndex(
+      (item) => item.id === tx.id || (tx.wewireId && item.wewireId === tx.wewireId),
+    );
+    if (idx >= 0 && txs[idx]?.wewireId === tx.wewireId) return txs[idx]!;
+    const next = idx >= 0 ? txs.map((item, i) => (i === idx ? tx : item)) : [tx, ...txs];
+    await setItem(key(), JSON.stringify(next));
+    return tx;
+  });
 }
 
 export async function recordSentPayment(input: {
@@ -74,7 +84,7 @@ export async function recordSentPayment(input: {
   if (existing) return existing;
 
   const tx: Transaction = {
-    id: `tx-${Date.now()}`,
+    id: `tx-${Crypto.randomUUID()}`,
     direction: 'sent',
     status,
     currency,
@@ -84,7 +94,7 @@ export async function recordSentPayment(input: {
     method: payment.destination.label,
     timestamp: now,
     wewireId: transactionId,
-    finoraId: `fin_${Date.now()}`,
+    finoraId: `fin_${Crypto.randomUUID()}`,
     rail: payment.destination.label,
     reference: payment.reference,
     source: input.source ?? 'chat',
@@ -112,7 +122,7 @@ export async function recordReceivedFunding(input: {
   const now = new Date().toISOString();
   const currency = (input.currency as SupportedCurrency) || 'USD';
   const tx: Transaction = {
-    id: `tx-${Date.now()}`,
+    id: `tx-${Crypto.randomUUID()}`,
     direction: 'received',
     status: 'completed',
     currency,
@@ -122,7 +132,7 @@ export async function recordReceivedFunding(input: {
     method: input.method,
     timestamp: now,
     wewireId: input.transactionId,
-    finoraId: `fin_${Date.now()}`,
+    finoraId: `fin_${Crypto.randomUUID()}`,
     rail: input.method,
     reference: input.reference,
     source: input.source ?? 'chat',
@@ -134,9 +144,9 @@ export async function recordReceivedFunding(input: {
 }
 
 export async function clearTransactions(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

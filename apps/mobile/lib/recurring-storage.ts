@@ -6,7 +6,11 @@ import {
   type RecurringStatus,
 } from '@/components/recurring/types';
 
-const KEY = 'finora.recurring.v1';
+import { userStorageKey } from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+
+const BASE_KEY = 'finora.recurring.v1';
+const key = () => userStorageKey(BASE_KEY);
 
 const memory = new Map<string, string>();
 const listeners = new Set<() => void>();
@@ -40,9 +44,9 @@ async function setItem(key: string, value: string): Promise<void> {
 }
 
 export async function listRecurring(): Promise<RecurringPayment[]> {
-  const raw = await getItem(KEY);
+  const raw = await getItem(key());
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_RECURRING));
+    await setItem(key(), JSON.stringify(MOCK_RECURRING));
     return [...MOCK_RECURRING];
   }
   try {
@@ -54,29 +58,36 @@ export async function listRecurring(): Promise<RecurringPayment[]> {
 }
 
 export async function saveRecurring(payment: RecurringPayment): Promise<RecurringPayment> {
-  const items = await listRecurring();
-  await setItem(KEY, JSON.stringify([payment, ...items.filter((item) => item.id !== payment.id)]));
-  notify();
-  return payment;
+  return serializeStorageMutation(key(), async () => {
+    const items = await listRecurring();
+    await setItem(
+      key(),
+      JSON.stringify([payment, ...items.filter((item) => item.id !== payment.id)]),
+    );
+    notify();
+    return payment;
+  });
 }
 
 export async function updateRecurringStatus(
   id: string,
   status: RecurringStatus,
 ): Promise<RecurringPayment | null> {
-  const items = await listRecurring();
-  const idx = items.findIndex((r) => r.id === id);
-  if (idx < 0) return null;
-  const next: RecurringPayment = { ...items[idx]!, status };
-  await setItem(KEY, JSON.stringify(items.map((r, i) => (i === idx ? next : r))));
-  notify();
-  return next;
+  return serializeStorageMutation(key(), async () => {
+    const items = await listRecurring();
+    const idx = items.findIndex((r) => r.id === id);
+    if (idx < 0) return null;
+    const next: RecurringPayment = { ...items[idx]!, status };
+    await setItem(key(), JSON.stringify(items.map((r, i) => (i === idx ? next : r))));
+    notify();
+    return next;
+  });
 }
 
 export async function clearRecurring(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

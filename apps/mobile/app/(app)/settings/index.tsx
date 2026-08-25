@@ -21,6 +21,7 @@ import { useOnboardingGate } from '@/lib/onboarding-gate';
 import { hasPasscode } from '@/lib/passcode-storage';
 import { resetFinoraSession } from '@/lib/reset-session';
 import { useSettings } from '@/lib/settings-context';
+import { signOutFinora } from '@/lib/sign-out';
 import { usePressGuard } from '@/lib/use-press-guard';
 
 export default function SettingsHubScreen() {
@@ -74,7 +75,7 @@ export default function SettingsHubScreen() {
         style: 'destructive',
         onPress: async () => {
           haptics.selection();
-          await signOut();
+          await signOutFinora(signOut);
           haptics.success();
           router.replace('/auth' as Href);
         },

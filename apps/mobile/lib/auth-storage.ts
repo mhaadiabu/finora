@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { userStorageKey } from './session-storage';
+
 const TAG_CONFIGURED_KEY = 'finora.auth.tagConfigured';
-const TAG_CONFIGURED_USER_KEY = 'finora.auth.tagConfiguredUserId';
 
 const memory = new Map<string, string>();
 
@@ -34,17 +35,13 @@ async function removeItem(key: string): Promise<void> {
 export async function getTagConfigured(userId: string | null | undefined): Promise<boolean> {
   if (!userId) return false;
 
-  const [value, configuredUserId] = await Promise.all([
-    getItem(TAG_CONFIGURED_KEY),
-    getItem(TAG_CONFIGURED_USER_KEY),
-  ]);
-  return value === '1' && configuredUserId === userId;
+  return (await getItem(userStorageKey(TAG_CONFIGURED_KEY))) === '1';
 }
 
-export async function setTagConfigured(userId: string): Promise<void> {
-  await Promise.all([setItem(TAG_CONFIGURED_KEY, '1'), setItem(TAG_CONFIGURED_USER_KEY, userId)]);
+export async function setTagConfigured(_userId: string): Promise<void> {
+  await setItem(userStorageKey(TAG_CONFIGURED_KEY), '1');
 }
 
 export async function clearTagConfigured(): Promise<void> {
-  await Promise.all([removeItem(TAG_CONFIGURED_KEY), removeItem(TAG_CONFIGURED_USER_KEY)]);
+  await removeItem(userStorageKey(TAG_CONFIGURED_KEY));
 }

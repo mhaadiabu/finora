@@ -1,9 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 
 import type { SupportedCurrency } from '@/components/ui/currency-icon';
 
 import { MOCK_CONTACTS, type Contact } from '@/components/contacts/types';
-const KEY = 'finora.contacts.v2';
+
+import { userStorageKey } from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+const BASE_KEY = 'finora.contacts.v2';
+const key = () => userStorageKey(BASE_KEY);
 
 const memory = new Map<string, string>();
 
@@ -32,9 +37,9 @@ function initialsFromName(name: string) {
 }
 
 export async function listContacts(): Promise<Contact[]> {
-  const raw = await getItem(KEY);
+  const raw = await getItem(key());
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_CONTACTS));
+    await setItem(key(), JSON.stringify(MOCK_CONTACTS));
     return [...MOCK_CONTACTS];
   }
   try {
@@ -51,7 +56,7 @@ export async function listContacts(): Promise<Contact[]> {
       )
       .map(({ handle: _legacyContactHandle, ...contact }) => contact);
     if (JSON.stringify(cleaned) !== raw) {
-      await setItem(KEY, JSON.stringify(cleaned));
+      await setItem(key(), JSON.stringify(cleaned));
     }
     return cleaned;
   } catch {
@@ -72,39 +77,44 @@ export async function saveContact(input: {
   identifier: string;
   favourite?: boolean;
 }): Promise<Contact> {
-  const contacts = await listContacts();
-  const existing = await findContactByIdentifier(input.identifier);
-  if (existing) {
-    const updated: Contact = {
-      ...existing,
-      name: input.name || existing.name,
-      method: input.method || existing.method,
-      currency: (input.currency as SupportedCurrency) || existing.currency,
+  return serializeStorageMutation(key(), async () => {
+    const contacts = await listContacts();
+    const needle = input.identifier.replace(/\s+/g, '').toLowerCase();
+    const existing = contacts.find(
+      (c) => c.identifier.replace(/\s+/g, '').toLowerCase() === needle,
+    );
+    if (existing) {
+      const updated: Contact = {
+        ...existing,
+        name: input.name || existing.name,
+        method: input.method || existing.method,
+        currency: (input.currency as SupportedCurrency) || existing.currency,
+        lastTxDate: new Date().toISOString(),
+      };
+      const next = contacts.map((c) => (c.id === existing.id ? updated : c));
+      await setItem(key(), JSON.stringify(next));
+      return updated;
+    }
+
+    const contact: Contact = {
+      id: `c-${Crypto.randomUUID()}`,
+      name: input.name.trim() || 'Contact',
+      initials: initialsFromName(input.name),
+      currency: (input.currency as SupportedCurrency) || 'USD',
+      method: input.method,
+      identifier: input.identifier,
+      favourite: input.favourite ?? false,
       lastTxDate: new Date().toISOString(),
     };
-    const next = contacts.map((c) => (c.id === existing.id ? updated : c));
-    await setItem(KEY, JSON.stringify(next));
-    return updated;
-  }
-
-  const contact: Contact = {
-    id: `c-${Date.now()}`,
-    name: input.name.trim() || 'Contact',
-    initials: initialsFromName(input.name),
-    currency: (input.currency as SupportedCurrency) || 'USD',
-    method: input.method,
-    identifier: input.identifier,
-    favourite: input.favourite ?? false,
-    lastTxDate: new Date().toISOString(),
-  };
-  await setItem(KEY, JSON.stringify([contact, ...contacts]));
-  return contact;
+    await setItem(key(), JSON.stringify([contact, ...contacts]));
+    return contact;
+  });
 }
 
 export async function clearContacts(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }
