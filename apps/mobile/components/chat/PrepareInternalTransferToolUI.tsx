@@ -114,7 +114,17 @@ function InternalTransferFlow({
     return () => {
       cancelled = true;
     };
-  }, [args.finoraTag, aui, onResult, payment, result, status]);
+  }, [
+    args.amount.currency,
+    args.finoraTag,
+    args.recipientName,
+    args.toSubCustomerId,
+    aui,
+    onResult,
+    payment,
+    result,
+    status,
+  ]);
 
   return (
     <>

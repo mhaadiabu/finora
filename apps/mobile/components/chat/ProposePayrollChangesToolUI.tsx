@@ -59,7 +59,7 @@ function changeDiffs(change: Change) {
 export const ProposePayrollChangesToolUI = makeAssistantToolUI<Record<string, unknown>, Result>({
   toolName: 'propose_payroll_changes',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function ProposePayrollChangesToolContent({ result, status }) {
     const { colors } = useTheme();
     const { getToken } = useAuth();
     const [phase, setPhase] = useState<'pending' | 'applying' | 'applied' | 'cancelled'>('pending');

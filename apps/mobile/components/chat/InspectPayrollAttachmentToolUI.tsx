@@ -15,7 +15,7 @@ export const InspectPayrollAttachmentToolUI = makeAssistantToolUI<
 >({
   toolName: 'inspect_payroll_attachment',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function InspectPayrollAttachmentToolContent({ result, status }) {
     const { colors } = useTheme();
     if (status.type === 'running' || !result) {
       return (

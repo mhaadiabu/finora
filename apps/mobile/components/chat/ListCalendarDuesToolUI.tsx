@@ -25,7 +25,7 @@ export const ListCalendarDuesToolUI = makeAssistantToolUI<
 >({
   toolName: 'list_calendar_dues',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function ListCalendarDuesToolContent({ result, status }) {
     const { colors } = useTheme();
     const events = result?.events;
     const connected = result?.connected;

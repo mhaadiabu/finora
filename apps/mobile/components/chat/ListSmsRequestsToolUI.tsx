@@ -24,7 +24,7 @@ export const ListSmsRequestsToolUI = makeAssistantToolUI<
 >({
   toolName: 'list_sms_requests',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function ListSmsRequestsToolContent({ result, status }) {
     const { colors } = useTheme();
     const requests = result?.requests;
     const connected = result?.connected;

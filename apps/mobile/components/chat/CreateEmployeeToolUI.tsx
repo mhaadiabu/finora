@@ -56,7 +56,7 @@ function EmployeeAddedCard({ employee }: { employee: Employee }) {
 export const CreateEmployeeToolUI = makeAssistantToolUI<CreateEmployeeArgs, CreateEmployeeResult>({
   toolName: 'create_employee',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function CreateEmployeeToolContent({ result, status }) {
     const { colors } = useTheme();
     const employee = result?.employee;
 

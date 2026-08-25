@@ -112,7 +112,7 @@ function EmployeePayCard({
 export const PrepareEmployeePaymentToolUI = makeAssistantToolUI<Args, Result>({
   toolName: 'prepare_employee_payment',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function PrepareEmployeePaymentToolContent({ result, status }) {
     const { colors } = useTheme();
     if (status.type === 'running' && !result?.employee)
       return (

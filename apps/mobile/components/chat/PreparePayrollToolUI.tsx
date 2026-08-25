@@ -125,7 +125,7 @@ function PayrollConfirmCard({
 export const PreparePayrollToolUI = makeAssistantToolUI<PreparePayrollArgs, PreparePayrollResult>({
   toolName: 'prepare_payroll',
   display: 'standalone',
-  render: ({ args, result, status }) => {
+  render: function PreparePayrollToolContent({ args, result, status }) {
     const { colors } = useTheme();
     const employees = result?.employees;
     const period = result?.period ?? args.period ?? defaultPayrollPeriod();
