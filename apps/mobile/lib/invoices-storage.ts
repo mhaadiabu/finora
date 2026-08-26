@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { MOCK_INVOICES, type Invoice, type InvoiceStatus } from '@/components/invoices/types';
 
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 import { serializeStorageMutation } from './storage-mutation';
 
 const BASE_KEY = 'finora.invoices.v1';
@@ -19,6 +19,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -27,10 +28,10 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-export async function listInvoices(): Promise<Invoice[]> {
-  const raw = await getItem(key());
+export async function listInvoices(storageKey = key()): Promise<Invoice[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(key(), JSON.stringify(MOCK_INVOICES));
+    await setItem(storageKey, JSON.stringify(MOCK_INVOICES));
     return [...MOCK_INVOICES];
   }
   try {
@@ -55,12 +56,13 @@ export async function updateInvoice(
   id: string,
   patch: Partial<Pick<Invoice, 'status' | 'paidAt' | 'transactionId'>>,
 ): Promise<Invoice | null> {
-  return serializeStorageMutation(key(), async () => {
-    const items = await listInvoices();
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const items = await listInvoices(storageKey);
     const idx = items.findIndex((i) => i.id === id);
     if (idx < 0) return null;
     const next: Invoice = { ...items[idx]!, ...patch };
-    await setItem(key(), JSON.stringify(items.map((i, n) => (n === idx ? next : i))));
+    await setItem(storageKey, JSON.stringify(items.map((i, n) => (n === idx ? next : i))));
     return next;
   });
 }

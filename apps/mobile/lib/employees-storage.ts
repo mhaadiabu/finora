@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 import { serializeStorageMutation } from './storage-mutation';
 
 export type PayoutDestination = {
@@ -81,6 +81,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -89,10 +90,10 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-export async function listEmployees(): Promise<Employee[]> {
-  const raw = await getItem(key());
+export async function listEmployees(storageKey = key()): Promise<Employee[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(key(), JSON.stringify(MOCK_EMPLOYEES));
+    await setItem(storageKey, JSON.stringify(MOCK_EMPLOYEES));
     return [...MOCK_EMPLOYEES];
   }
   try {
@@ -127,20 +128,21 @@ export async function findEmployeeByName(query: string): Promise<Employee | null
 export async function createEmployee(
   input: Omit<Employee, 'id' | 'status'> & { status?: Employee['status'] },
 ): Promise<Employee> {
-  return serializeStorageMutation(key(), async () => {
-    const employees = await listEmployees();
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const employees = await listEmployees(storageKey);
     const employee: Employee = {
       ...input,
       id: `emp_${Crypto.randomUUID()}`,
       status: input.status ?? 'active',
     };
-    await setItem(key(), JSON.stringify([employee, ...employees]));
+    await setItem(storageKey, JSON.stringify([employee, ...employees]));
     return employee;
   });
 }
 
-export async function listPayrollRuns(): Promise<PayrollRun[]> {
-  const raw = await getItem(runKey());
+export async function listPayrollRuns(storageKey = runKey()): Promise<PayrollRun[]> {
+  const raw = await getItem(storageKey);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as PayrollRun[];
@@ -153,14 +155,15 @@ export async function listPayrollRuns(): Promise<PayrollRun[]> {
 export async function recordPayrollRun(
   run: Omit<PayrollRun, 'id' | 'createdAt'>,
 ): Promise<PayrollRun> {
-  return serializeStorageMutation(runKey(), async () => {
-    const runs = await listPayrollRuns();
+  const storageKey = runKey();
+  return serializeStorageMutation(storageKey, async () => {
+    const runs = await listPayrollRuns(storageKey);
     const next: PayrollRun = {
       ...run,
       id: `prun_${Crypto.randomUUID()}`,
       createdAt: new Date().toISOString(),
     };
-    await setItem(runKey(), JSON.stringify([next, ...runs]));
+    await setItem(storageKey, JSON.stringify([next, ...runs]));
     return next;
   });
 }

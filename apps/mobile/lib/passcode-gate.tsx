@@ -8,7 +8,10 @@ import {
   type ReactNode,
 } from 'react';
 
+import { hasPasscode, subscribeToPasscodeChanges } from './passcode-storage';
+
 type PasscodeGateValue = {
+  enabled: boolean;
   locked: boolean;
   lock: () => void;
   unlock: () => void;
@@ -23,21 +26,38 @@ export function usePasscodeGate() {
 }
 
 export function PasscodeGateProvider({
+  enabled,
   initiallyLocked,
   children,
 }: {
+  enabled: boolean;
   initiallyLocked: boolean;
   children: ReactNode;
 }) {
+  const [verifierExists, setVerifierExists] = useState(enabled);
   const [locked, setLocked] = useState(initiallyLocked);
 
   useEffect(() => {
+    setVerifierExists(enabled);
     setLocked(initiallyLocked);
-  }, [initiallyLocked]);
+  }, [enabled, initiallyLocked]);
 
-  const lock = useCallback(() => setLocked(true), []);
+  useEffect(
+    () =>
+      subscribeToPasscodeChanges(() => {
+        void hasPasscode().then(setVerifierExists);
+      }),
+    [],
+  );
+
+  const lock = useCallback(() => {
+    if (verifierExists) setLocked(true);
+  }, [verifierExists]);
   const unlock = useCallback(() => setLocked(false), []);
-  const value = useMemo(() => ({ locked, lock, unlock }), [lock, locked, unlock]);
+  const value = useMemo(
+    () => ({ enabled: verifierExists, locked, lock, unlock }),
+    [lock, locked, unlock, verifierExists],
+  );
 
   return <PasscodeGateContext.Provider value={value}>{children}</PasscodeGateContext.Provider>;
 }

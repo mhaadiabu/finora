@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { AccountType } from '@/lib/account';
 
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 
 const KEYS = {
   completed: 'finora.onboarding.completed',
@@ -33,6 +33,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);

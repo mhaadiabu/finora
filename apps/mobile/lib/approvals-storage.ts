@@ -6,7 +6,7 @@ import {
   type ApprovalStatus,
 } from '@/components/approvals/types';
 
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 import { serializeStorageMutation } from './storage-mutation';
 
 const BASE_KEY = 'finora.approvals.v2';
@@ -23,6 +23,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -31,10 +32,10 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-export async function listApprovals(): Promise<ApprovalRequest[]> {
-  const raw = await getItem(key());
+export async function listApprovals(storageKey = key()): Promise<ApprovalRequest[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(key(), JSON.stringify(MOCK_APPROVALS));
+    await setItem(storageKey, JSON.stringify(MOCK_APPROVALS));
     return [...MOCK_APPROVALS];
   }
   try {
@@ -59,12 +60,13 @@ export async function updateApproval(
   id: string,
   patch: Partial<Pick<ApprovalRequest, 'status' | 'resolvedAt' | 'transactionId'>>,
 ): Promise<ApprovalRequest | null> {
-  return serializeStorageMutation(key(), async () => {
-    const items = await listApprovals();
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const items = await listApprovals(storageKey);
     const idx = items.findIndex((a) => a.id === id);
     if (idx < 0) return null;
     const next: ApprovalRequest = { ...items[idx]!, ...patch };
-    await setItem(key(), JSON.stringify(items.map((a, i) => (i === idx ? next : a))));
+    await setItem(storageKey, JSON.stringify(items.map((a, i) => (i === idx ? next : a))));
     return next;
   });
 }

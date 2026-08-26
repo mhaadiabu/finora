@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '@/lib/api-url';
 import { getCachedSettings } from '@/lib/settings-storage';
 
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 
 export type FinoraTagProfile = FinoraTagAccount & {
   initials: string;
@@ -95,6 +95,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -208,12 +209,14 @@ export async function lookupFinoraTag(value: string) {
   return MOCK_FINORA_DIRECTORY.find((profile) => profile.tag === tag) ?? null;
 }
 
-export async function listRecentFinoraTags(): Promise<FinoraTagSuggestion[]> {
-  const raw = await getItem(recentKey());
+export async function listRecentFinoraTags(
+  storageKey = recentKey(),
+): Promise<FinoraTagSuggestion[]> {
+  const raw = await getItem(storageKey);
   let tags: string[] = [];
   if (!raw) {
     tags = [...SEED_RECENT_TAGS];
-    await setItem(recentKey(), JSON.stringify(tags));
+    await setItem(storageKey, JSON.stringify(tags));
   } else {
     try {
       const parsed = JSON.parse(raw) as string[];
@@ -242,6 +245,7 @@ export async function rememberFinoraTagRecipient(input: {
   country?: string;
 }): Promise<void> {
   const tag = normalizeFinoraTag(input.tag);
+  const storageKey = recentKey();
   if (!tag || tag === getCurrentFinoraTag()) return;
 
   // Keep the mock directory in sync for people we only learned via a transfer.
@@ -258,12 +262,12 @@ export async function rememberFinoraTagRecipient(input: {
     });
   }
 
-  const recent = await listRecentFinoraTags();
+  const recent = await listRecentFinoraTags(storageKey);
   const next = [tag, ...recent.map((item) => item.tag).filter((item) => item !== tag)].slice(
     0,
     RECENT_LIMIT,
   );
-  await setItem(recentKey(), JSON.stringify(next));
+  await setItem(storageKey, JSON.stringify(next));
 }
 
 /**

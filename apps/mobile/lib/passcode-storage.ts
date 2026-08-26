@@ -2,13 +2,26 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 
-import { userStorageKey } from './session-storage';
+import { getActiveUserId, userStorageKey } from './session-storage';
 
 const LEGACY_KEY = 'finora.passcode.hash';
 const VERIFIER_KEY = 'finora.passcode.verifier.v2';
 export const PASSCODE_LENGTH = 6;
 
 type PasscodeVerifier = { version: 2; salt: string; digest: string };
+const passcodeListeners = new Set<() => void>();
+
+/** Track SecureStore verifier changes so lifecycle locks stay accurate. */
+export function subscribeToPasscodeChanges(listener: () => void) {
+  passcodeListeners.add(listener);
+  return () => {
+    passcodeListeners.delete(listener);
+  };
+}
+
+function notifyPasscodeChanged() {
+  passcodeListeners.forEach((listener) => listener());
+}
 
 async function secureStoreAvailable() {
   return SecureStore.isAvailableAsync().catch(() => false);
@@ -45,6 +58,8 @@ export async function hasPasscode() {
 
 export async function setPasscode(passcode: string) {
   if (!/^\d{6}$/.test(passcode)) throw new Error(`Passcode must be ${PASSCODE_LENGTH} digits.`);
+  const storageKey = userStorageKey(VERIFIER_KEY);
+  const userId = getActiveUserId();
   if (!(await secureStoreAvailable())) throw new Error('Secure passcode storage is unavailable.');
   const salt = Crypto.randomUUID();
   const verifier: PasscodeVerifier = {
@@ -52,10 +67,12 @@ export async function setPasscode(passcode: string) {
     salt,
     digest: await digestPasscode(passcode, salt),
   };
-  await SecureStore.setItemAsync(userStorageKey(VERIFIER_KEY), JSON.stringify(verifier), {
+  if (getActiveUserId() !== userId) throw new Error('Account changed while setting passcode.');
+  await SecureStore.setItemAsync(storageKey, JSON.stringify(verifier), {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   });
   await removeLegacyVerifier();
+  notifyPasscodeChanged();
 }
 
 export async function verifyPasscode(passcode: string) {
@@ -67,4 +84,5 @@ export async function verifyPasscode(passcode: string) {
 export async function clearPasscode() {
   await SecureStore.deleteItemAsync(userStorageKey(VERIFIER_KEY)).catch(() => undefined);
   await removeLegacyVerifier();
+  notifyPasscodeChanged();
 }

@@ -5,7 +5,7 @@ import type { SupportedCurrency } from '@/components/ui/currency-icon';
 
 import { MOCK_CONTACTS, type Contact } from '@/components/contacts/types';
 
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 import { serializeStorageMutation } from './storage-mutation';
 const BASE_KEY = 'finora.contacts.v2';
 const key = () => userStorageKey(BASE_KEY);
@@ -21,6 +21,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -36,10 +37,10 @@ function initialsFromName(name: string) {
   return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase();
 }
 
-export async function listContacts(): Promise<Contact[]> {
-  const raw = await getItem(key());
+export async function listContacts(storageKey = key()): Promise<Contact[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(key(), JSON.stringify(MOCK_CONTACTS));
+    await setItem(storageKey, JSON.stringify(MOCK_CONTACTS));
     return [...MOCK_CONTACTS];
   }
   try {
@@ -56,7 +57,7 @@ export async function listContacts(): Promise<Contact[]> {
       )
       .map(({ handle: _legacyContactHandle, ...contact }) => contact);
     if (JSON.stringify(cleaned) !== raw) {
-      await setItem(key(), JSON.stringify(cleaned));
+      await setItem(storageKey, JSON.stringify(cleaned));
     }
     return cleaned;
   } catch {
@@ -77,8 +78,9 @@ export async function saveContact(input: {
   identifier: string;
   favourite?: boolean;
 }): Promise<Contact> {
-  return serializeStorageMutation(key(), async () => {
-    const contacts = await listContacts();
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const contacts = await listContacts(storageKey);
     const needle = input.identifier.replace(/\s+/g, '').toLowerCase();
     const existing = contacts.find(
       (c) => c.identifier.replace(/\s+/g, '').toLowerCase() === needle,
@@ -92,7 +94,7 @@ export async function saveContact(input: {
         lastTxDate: new Date().toISOString(),
       };
       const next = contacts.map((c) => (c.id === existing.id ? updated : c));
-      await setItem(key(), JSON.stringify(next));
+      await setItem(storageKey, JSON.stringify(next));
       return updated;
     }
 
@@ -106,7 +108,7 @@ export async function saveContact(input: {
       favourite: input.favourite ?? false,
       lastTxDate: new Date().toISOString(),
     };
-    await setItem(key(), JSON.stringify([contact, ...contacts]));
+    await setItem(storageKey, JSON.stringify([contact, ...contacts]));
     return contact;
   });
 }

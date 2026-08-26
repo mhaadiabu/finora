@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 
 export type BusinessExpense = {
   id: string;
@@ -73,6 +73,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -81,10 +82,10 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-export async function listExpenses(): Promise<BusinessExpense[]> {
-  const raw = await getItem(key());
+export async function listExpenses(storageKey = key()): Promise<BusinessExpense[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(key(), JSON.stringify(MOCK_EXPENSES));
+    await setItem(storageKey, JSON.stringify(MOCK_EXPENSES));
     return [...MOCK_EXPENSES];
   }
   try {

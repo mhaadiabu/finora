@@ -26,8 +26,9 @@ async function request(path: string, getToken: GetToken, init?: RequestInit) {
 }
 
 export async function getRemoteInvoices(getToken: GetToken) {
+  const storageKey = cacheKey();
   const result = InvoiceListResponseSchema.parse(await request('', getToken));
-  await AsyncStorage.setItem(cacheKey(), JSON.stringify(result)).catch(() => undefined);
+  await AsyncStorage.setItem(storageKey, JSON.stringify(result)).catch(() => undefined);
   return result;
 }
 

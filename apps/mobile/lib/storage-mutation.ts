@@ -12,3 +12,7 @@ export function serializeStorageMutation<T>(key: string, operation: () => Promis
   );
   return current;
 }
+
+export async function waitForStorageMutations() {
+  await Promise.allSettled(queues.values());
+}

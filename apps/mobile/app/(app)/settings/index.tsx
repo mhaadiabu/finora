@@ -15,7 +15,6 @@ import { AppText as Text } from '@/components/ui/text';
 import { useTheme } from '@/hooks/use-theme';
 import { getAccountFullLabel, getAccountType } from '@/lib/account';
 import { useAuthGate } from '@/lib/auth-gate';
-import { clearTagConfigured } from '@/lib/auth-storage';
 import { haptics } from '@/lib/haptics';
 import { useOnboardingGate } from '@/lib/onboarding-gate';
 import { hasPasscode } from '@/lib/passcode-storage';
@@ -91,9 +90,8 @@ export default function SettingsHubScreen() {
         style: 'destructive',
         onPress: async () => {
           haptics.selection();
-          await signOut();
           await resetFinoraSession();
-          await clearTagConfigured();
+          await signOut();
           markTagUnconfigured();
           markIncomplete();
           haptics.success();

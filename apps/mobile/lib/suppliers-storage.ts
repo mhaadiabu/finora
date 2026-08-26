@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { PayoutDestination } from '@/lib/employees-storage';
 
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 
 export type Supplier = {
   id: string;
@@ -57,6 +57,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -65,10 +66,10 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-export async function listSuppliers(): Promise<Supplier[]> {
-  const raw = await getItem(key());
+export async function listSuppliers(storageKey = key()): Promise<Supplier[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(key(), JSON.stringify(MOCK_SUPPLIERS));
+    await setItem(storageKey, JSON.stringify(MOCK_SUPPLIERS));
     return [...MOCK_SUPPLIERS];
   }
   try {

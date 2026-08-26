@@ -12,7 +12,7 @@ import {
   type TransactionStatus,
 } from '@/components/activity/types';
 
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 import { serializeStorageMutation } from './storage-mutation';
 
 const BASE_KEY = 'finora.transactions.v1';
@@ -29,6 +29,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -37,10 +38,10 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-export async function listTransactions(): Promise<Transaction[]> {
-  const raw = await getItem(key());
+export async function listTransactions(storageKey = key()): Promise<Transaction[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(key(), JSON.stringify(MOCK_TRANSACTIONS));
+    await setItem(storageKey, JSON.stringify(MOCK_TRANSACTIONS));
     return [...MOCK_TRANSACTIONS];
   }
   try {
@@ -57,14 +58,15 @@ export async function getTransaction(id: string): Promise<Transaction | null> {
 }
 
 export async function upsertTransaction(tx: Transaction): Promise<Transaction> {
-  return serializeStorageMutation(key(), async () => {
-    const txs = await listTransactions();
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const txs = await listTransactions(storageKey);
     const idx = txs.findIndex(
       (item) => item.id === tx.id || (tx.wewireId && item.wewireId === tx.wewireId),
     );
     if (idx >= 0 && txs[idx]?.wewireId === tx.wewireId) return txs[idx]!;
     const next = idx >= 0 ? txs.map((item, i) => (i === idx ? tx : item)) : [tx, ...txs];
-    await setItem(key(), JSON.stringify(next));
+    await setItem(storageKey, JSON.stringify(next));
     return tx;
   });
 }

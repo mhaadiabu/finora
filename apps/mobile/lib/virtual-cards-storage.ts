@@ -10,7 +10,7 @@ import {
   type VirtualCardStatus,
 } from '@/components/cards/types';
 
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 import { serializeStorageMutation } from './storage-mutation';
 
 const BASE_KEY = 'finora.virtual-cards.v1';
@@ -31,6 +31,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -57,9 +58,9 @@ export async function hasUnreadVirtualCards(): Promise<boolean> {
   return (await getItem(unreadKey())) === '1';
 }
 
-export async function clearUnreadVirtualCards(): Promise<void> {
-  if (!(await hasUnreadVirtualCards())) return;
-  await setItem(unreadKey(), '0');
+export async function clearUnreadVirtualCards(storageKey = unreadKey()): Promise<void> {
+  if ((await getItem(storageKey)) !== '1') return;
+  await setItem(storageKey, '0');
   notify();
 }
 
@@ -72,8 +73,8 @@ async function publishIssuance(card: VirtualCard) {
   notify();
 }
 
-async function persist(cards: VirtualCard[]) {
-  await setItem(key(), JSON.stringify(cards));
+async function persist(storageKey: string, cards: VirtualCard[]) {
+  await setItem(storageKey, JSON.stringify(cards));
   notify();
   return cards;
 }
@@ -96,10 +97,10 @@ function mockExpiry() {
   return `${month}/${String(year).padStart(2, '0')}`;
 }
 
-export async function listVirtualCards(): Promise<VirtualCard[]> {
-  const raw = await getItem(key());
+export async function listVirtualCards(storageKey = key()): Promise<VirtualCard[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(key(), JSON.stringify(MOCK_VIRTUAL_CARDS));
+    await setItem(storageKey, JSON.stringify(MOCK_VIRTUAL_CARDS));
     return [...MOCK_VIRTUAL_CARDS];
   }
   try {
@@ -127,8 +128,9 @@ export async function findVirtualCardByLabel(query: string): Promise<VirtualCard
 }
 
 export async function createVirtualCard(input: CreateVirtualCardInput): Promise<VirtualCard> {
-  return serializeStorageMutation(key(), async () => {
-    const cards = await listVirtualCards();
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const cards = await listVirtualCards(storageKey);
     const network = input.network ?? (Math.random() > 0.5 ? 'visa' : 'mastercard');
     const pan = mockPan(network);
     const card: VirtualCard = {
@@ -145,7 +147,7 @@ export async function createVirtualCard(input: CreateVirtualCardInput): Promise<
       expiry: mockExpiry(),
       cvv: randomDigits(3),
     };
-    await persist([card, ...cards]);
+    await persist(storageKey, [card, ...cards]);
     await publishIssuance(card);
     return card;
   });
@@ -155,12 +157,16 @@ export async function updateVirtualCard(
   id: string,
   patch: Partial<Pick<VirtualCard, 'status' | 'spendLimit' | 'label' | 'spent'>>,
 ): Promise<VirtualCard | null> {
-  return serializeStorageMutation(key(), async () => {
-    const cards = await listVirtualCards();
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const cards = await listVirtualCards(storageKey);
     const idx = cards.findIndex((c) => c.id === id);
     if (idx < 0) return null;
     const next: VirtualCard = { ...cards[idx]!, ...patch };
-    await persist(cards.map((c, i) => (i === idx ? next : c)));
+    await persist(
+      storageKey,
+      cards.map((c, i) => (i === idx ? next : c)),
+    );
     return next;
   });
 }
@@ -173,6 +179,8 @@ export async function setVirtualCardStatus(
 }
 
 export async function clearVirtualCards(): Promise<void> {
-  await persist([]);
-  await clearUnreadVirtualCards();
+  const cardsKey = key();
+  const unreadStorageKey = unreadKey();
+  await persist(cardsKey, []);
+  await clearUnreadVirtualCards(unreadStorageKey);
 }

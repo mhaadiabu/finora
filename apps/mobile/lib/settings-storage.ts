@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getSystemLanguage } from './i18n';
-import { userStorageKey } from './session-storage';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
 import { getActiveUserId } from './session-storage';
 
 const BASE_KEY = 'finora.settings.v1';
@@ -18,6 +18,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -119,15 +120,24 @@ export function getCachedSettings(): FinoraSettings {
 }
 
 export async function getSettings(): Promise<FinoraSettings> {
-  cachedUserId = getActiveUserId();
-  const raw = await getItem(key());
+  const userId = getActiveUserId();
+  const storageKey = userStorageKey(BASE_KEY, userId);
+  const raw = await getItem(storageKey);
+  const fallback = () => ({
+    ...DEFAULT_SETTINGS,
+    notifications: { ...DEFAULT_SETTINGS.notifications },
+  });
   if (!raw) {
-    cached = { ...DEFAULT_SETTINGS, notifications: { ...DEFAULT_SETTINGS.notifications } };
-    return cached;
+    const next = fallback();
+    if (getActiveUserId() === userId) {
+      cachedUserId = userId;
+      cached = next;
+    }
+    return next;
   }
   try {
     const parsed = JSON.parse(raw) as Partial<FinoraSettings>;
-    cached = {
+    const next = {
       ...DEFAULT_SETTINGS,
       ...parsed,
       notifications: {
@@ -136,16 +146,27 @@ export async function getSettings(): Promise<FinoraSettings> {
       },
       trustedDevices: parsed.trustedDevices ?? DEFAULT_SETTINGS.trustedDevices,
     };
-    return cached;
+    if (getActiveUserId() === userId) {
+      cachedUserId = userId;
+      cached = next;
+    }
+    return next;
   } catch {
-    cached = { ...DEFAULT_SETTINGS, notifications: { ...DEFAULT_SETTINGS.notifications } };
-    return cached;
+    const next = fallback();
+    if (getActiveUserId() === userId) {
+      cachedUserId = userId;
+      cached = next;
+    }
+    return next;
   }
 }
 
 export async function saveSettings(patch: Partial<FinoraSettings>): Promise<FinoraSettings> {
   const operation = writeQueue.then(async () => {
-    const current = cached ?? (await getSettings());
+    const userId = getActiveUserId();
+    const storageKey = userStorageKey(BASE_KEY, userId);
+    const current =
+      cachedUserId === userId ? (cached ?? (await getSettings())) : await getSettings();
     const next: FinoraSettings = {
       ...current,
       ...patch,
@@ -155,9 +176,10 @@ export async function saveSettings(patch: Partial<FinoraSettings>): Promise<Fino
       },
       trustedDevices: patch.trustedDevices ?? current.trustedDevices,
     };
+    if (getActiveUserId() !== userId) return current;
     cached = next;
-    cachedUserId = getActiveUserId();
-    await setItem(key(), JSON.stringify(next));
+    cachedUserId = userId;
+    await setItem(storageKey, JSON.stringify(next));
     notify();
     return next;
   });
@@ -179,8 +201,9 @@ export async function revokeTrustedDevice(id: string): Promise<FinoraSettings> {
 }
 
 export async function clearSettings(): Promise<void> {
+  const storageKey = key();
   cached = null;
   cachedUserId = null;
-  await removeItem(key());
+  await removeItem(storageKey);
   notify();
 }

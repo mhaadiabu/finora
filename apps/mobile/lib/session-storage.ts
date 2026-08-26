@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let activeUserId: string | null = null;
+const blockedUserIds = new Set<string>();
 
 const USER_DATA_KEYS = [
   'finora.auth.tagConfigured',
@@ -40,23 +41,38 @@ export function getActiveUserId() {
   return activeUserId;
 }
 
-export function userStorageKey(baseKey: string) {
-  return `${baseKey}.user.${activeUserId ? encodeUserId(activeUserId) : 'signed-out'}`;
+export function userStorageKey(baseKey: string, userId = activeUserId) {
+  return `${baseKey}.user.${userId ? encodeUserId(userId) : 'signed-out'}`;
+}
+
+export function isUserStorageKeyWritable(storageKey: string) {
+  const suffix = activeUserId ? `.user.${encodeUserId(activeUserId)}` : '.user.signed-out';
+  return Boolean(activeUserId && !blockedUserIds.has(activeUserId) && storageKey.endsWith(suffix));
+}
+
+/** Stop writes started by the current account before its local data is removed. */
+export function blockActiveUserStorageWrites() {
+  if (activeUserId) blockedUserIds.add(activeUserId);
 }
 
 /** Set the Clerk user used to scope device-local financial data. */
 export async function setActiveUserId(userId: string | null) {
   activeUserId = userId;
   if (!userId) return;
+  blockedUserIds.delete(userId);
 
   // Old releases used global keys. Quarantine them instead of assigning one
   // account's financial data to whichever user signs in first.
   const legacy = await AsyncStorage.multiGet([...USER_DATA_KEYS]).catch(() => []);
   const present = legacy.filter(([, value]) => value !== null);
   if (present.length === 0) return;
-  await AsyncStorage.multiSet(
-    present.map(([key, value]) => [`finora.legacy.quarantine.${key}`, value!]),
-  ).catch(() => undefined);
+  try {
+    await AsyncStorage.multiSet(
+      present.map(([key, value]) => [`finora.legacy.quarantine.${key}`, value!]),
+    );
+  } catch {
+    return;
+  }
   await AsyncStorage.multiRemove(present.map(([key]) => key)).catch(() => undefined);
 }
 
@@ -65,7 +81,7 @@ export async function clearActiveUserStorage() {
   const suffix = `.user.${userId ? encodeUserId(userId) : 'signed-out'}`;
   const allKeys = await AsyncStorage.getAllKeys().catch(() => []);
   const keys = [
-    ...USER_DATA_KEYS.map(userStorageKey),
+    ...USER_DATA_KEYS.map((baseKey) => userStorageKey(baseKey, userId)),
     ...allKeys.filter(
       (key) => key.endsWith(suffix) || (userId && key === `finora:remote-threads:${userId}`),
     ),

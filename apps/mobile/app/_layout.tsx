@@ -129,7 +129,7 @@ function RootNavigator() {
   const { isLoaded: authLoaded, isSignedIn } = useAuth();
   const { status: phoneStatus } = usePhoneGate();
   const { tagConfigured } = useAuthGate();
-  const { lock, locked: passcodeLocked } = usePasscodeGate();
+  const { enabled: passcodeEnabled, lock, locked: passcodeLocked } = usePasscodeGate();
   const { completed: onboardingCompleted } = useOnboardingGate();
   const [firstSegment, ...remainingSegments] = useSegments();
   const [secondSegment] = remainingSegments as string[];
@@ -141,7 +141,12 @@ function RootNavigator() {
       secondSegment === 'enter-passcode');
   const isEnterPasscodeScreen = firstSegment === 'auth' && secondSegment === 'enter-passcode';
   const requiresPasscode =
-    onboardingCompleted && authLoaded && isSignedIn && tagConfigured && passcodeLocked;
+    onboardingCompleted &&
+    authLoaded &&
+    isSignedIn &&
+    tagConfigured &&
+    passcodeEnabled &&
+    passcodeLocked;
   const concealProtectedContent =
     Boolean(isSignedIn) &&
     ((requiresPasscode && !isEnterPasscodeScreen) || (!tagConfigured && phoneStatus === 'loading'));
@@ -431,6 +436,7 @@ function RootApp() {
                 <PhoneGateProvider key={boot.userId ?? 'signed-out'}>
                   <PasscodeGateProvider
                     key={boot.userId ?? 'signed-out'}
+                    enabled={boot.passcodeExists}
                     initiallyLocked={Boolean(
                       boot.userId && boot.tagConfigured && boot.passcodeExists,
                     )}
