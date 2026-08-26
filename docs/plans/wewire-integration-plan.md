@@ -6,7 +6,7 @@
 
 The official docs expose an OpenAPI spec at `https://stage-capi.wewireafrica.com/endpoints/spec`. It contains 68 operations and 106 schemas. That spec disagrees with the current hand-written client in several places, so the client should not be treated as authoritative. Examples: the live sub-customer purpose enum is `PAYOUT | COLLECTION`, onboarding is `DRAFT | IN_REVIEW | REJECTED | RESUBMISSION | APPROVED`, transaction types are only `DEBIT | CREDIT`, and purpose codes are `POP001` through `POP032`. Finora currently uses invented values for all four.
 
-There is also a product-model gap to settle before implementation. Finora’s mock store treats each mobile user as a WeWire sub-customer. But WeWire’s own account model suggests a cleaner model for Finora: one Finora business holds the WeWire business wallets; each user maps to one WeWire sub-customer wallet set. User-facing balances should come from the user’s sub-customer wallets, while payroll and supplier payouts can be funded from the business or swept through the user where appropriate.
+One Finora platform business sits on WeWire. After a user completes signup and selects their Finora profile type, Finora provisions one matching WeWire sub-customer. Each user owns an isolated GHS, NGN, and USD wallet set and completes their own KYC through a post-signup flow. Payroll is funded directly from Finora’s business wallet rather than creating intermediate employee balances.
 
 ## Architecture
 
@@ -30,11 +30,11 @@ Reads and previews can hit WeWire immediately. Execution calls happen only insid
 - Generate or derive typed schemas from the official OpenAPI document rather than maintaining guesses by hand.
 - Replace stale shared enums (`SubCustomerPurpose`, `SubCustomerOnboardingStatus`, wallet transaction enums, `PurposeCode`) with WeWire’s real values plus explicit Finora presentation mappings where needed.
 - Add a `WW_MODE=sandbox|production|mock` setting. Keep mock mode working so demos remain honest and sandbox credentials are never implied to be production rails.
-- Introduce a single API helper that resolves the current Clerk user, finds or lazily provisions their linked WeWire sub-customer, and returns both database records and the typed client.
+- Introduce a single API helper that resolves the current Clerk user, finds their linked WeWire sub-customer, and returns both database records and the typed client. Signup provisions the link after the user chooses a profile type.
 
 ### Phase 1: identity and wallets
 
-Map each authenticated Finora profile to one active WeWire sub-customer using a stable `referenceId` derived from the Finora user ID.
+Map each authenticated Finora profile to one active WeWire sub-customer using a stable `referenceId` derived from the Finora user ID. Start with GHS, NGN, and USD wallets. Treat wallets as read-only until that user’s KYC reaches the provider state required for money movement.
 
 Add these tables:
 
@@ -58,7 +58,7 @@ This phase gives the app a real financial account without moving money.
 - Replace fake bank/mobile-money lookup handlers with `GET /v1/account-lookup`.
 - Use `GET /v1/banks?currency=GHS|NGN` instead of hard-coded banks.
 - Implement beneficiary CRUD against `/v1/beneficiaries`, preserving Finora contact metadata locally and WeWire IDs remotely.
-- Call `GET /v1/rates`, `GET /v1/rates/pair`, `POST /v1/rates/conversion/preview`, and `POST /v1/fees/payout` for quotes and fee previews.
+- Call `GET /v1/rates`, `GET /v1/rates/pair`, `POST /v1/rates/conversion/preview`, and `POST /v1/fees/payout` for quotes and fee previews. Gate GHS and NGN local payouts ahead of USD international payouts.
 - Persist quote snapshots on preparations because WeWire conversion previews do not appear to return an executable quote token. Recheck the rate at execution and fail safely if the user approved materially different economics.
 
 ### Phase 3: approvals and money movement
@@ -72,7 +72,7 @@ Implement preparation and execution pairs:
 - Sub-customer-to-sub-customer transfer: `POST /v1/subcustomers/{id}/transfer`.
 - FX between user wallets: preview then `POST /v1/subcustomers/{id}/conversions`.
 - Crypto withdrawal: `POST /v1/subcustomers/{id}/wallets/{walletId}/withdraw`.
-- Payroll/supplier/invoice payments: prepare one approval per run or invoice, then fan out into idempotent WeWire disbursements during execution.
+- Payroll/supplier/invoice payments: prepare one approval per run or invoice, then fan out into idempotent WeWire disbursements during execution. Fund payroll directly from Finora’s business wallet.
 
 Execution rules:
 
@@ -88,7 +88,7 @@ Collections are a separate flow. Do not overload disbursement approvals for them
 - Verify `WEWIRE_WEBHOOK_SECRET` before parsing event handling logic beyond the raw body.
 - Persist webhook events before applying them.
 - Process idempotently and update cached wallets and transaction states.
-- Poll unresolved executions on a schedule as a backup.
+- Poll unresolved executions on a schedule. Until WeWire confirms webhook availability and payload behavior for our account, polling is the source of truth and webhooks are only an optimization.
 - Add structured logs for mode, endpoint operation ID, Finora approval ID, WeWire transaction ID, and retryability. Never log credentials, PINs, full beneficiary secrets, or raw KYC documents.
 - Surface pending/provider-failed states honestly in mobile and MCP.
 
@@ -105,7 +105,7 @@ Then implement business KYC:
 5. Submit for review.
 6. Reflect `DRAFT`, `IN_REVIEW`, `RESUBMISSION`, `APPROVED`, and `REJECTED` accurately.
 
-Sweeping and auto-sweep should follow once users can hold funded wallets.
+Each user completes their own KYC in the post-signup flow. Profile type determines whether Finora collects individual data or business data plus beneficial owners. Sweeping and auto-sweep should follow once users can hold funded wallets.
 
 ## Suggested first slice
 
@@ -119,10 +119,10 @@ Land this in small commits:
 
 The first demo-worthy milestone is a sandbox user whose wallet balance comes from WeWire, who requests a MoMo payout, sees it in Approvals, approves with PIN, and gets a real sandbox transaction ID reconciled back into Finora activity.
 
-## Open decisions
+## Resolved decisions
 
-- Confirm whether each consumer user should get a WeWire sub-customer at signup or after first funding intent.
-- Decide which currencies are enabled in v1. I would start with GHS and USDT for user wallets, then add NGN and USD only after the payout path works.
-- Decide whether payroll pays directly from the Finora business wallet or funds each employee sub-customer first. Direct beneficiary payouts look simpler and produce fewer intermediate balances.
-- Confirm webhook availability and event payloads with WeWire before relying on them; reconcile with polling until that is proven.
-- Ask WeWire whether conversion previews return any executable quote lifetime or token. If not, quote expiry must be owned entirely by Finora.
+- Provision each user’s WeWire sub-customer immediately after signup and profile-type selection.
+- Launch with GHS, NGN, and USD user wallets.
+- Fund payroll directly from the Finora business wallet.
+- Treat polling as authoritative until WeWire confirms webhook availability for our account.
+- Give every user their own post-signup KYC flow; profile type controls whether it requests individual or business data.
