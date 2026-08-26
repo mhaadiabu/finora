@@ -15,12 +15,12 @@ import { AppText as Text } from '@/components/ui/text';
 import { useTheme } from '@/hooks/use-theme';
 import { getAccountFullLabel, getAccountType } from '@/lib/account';
 import { useAuthGate } from '@/lib/auth-gate';
-import { clearTagConfigured } from '@/lib/auth-storage';
 import { haptics } from '@/lib/haptics';
 import { useOnboardingGate } from '@/lib/onboarding-gate';
 import { hasPasscode } from '@/lib/passcode-storage';
 import { resetFinoraSession } from '@/lib/reset-session';
 import { useSettings } from '@/lib/settings-context';
+import { signOutFinora } from '@/lib/sign-out';
 import { usePressGuard } from '@/lib/use-press-guard';
 
 export default function SettingsHubScreen() {
@@ -74,7 +74,7 @@ export default function SettingsHubScreen() {
         style: 'destructive',
         onPress: async () => {
           haptics.selection();
-          await signOut();
+          await signOutFinora(signOut);
           haptics.success();
           router.replace('/auth' as Href);
         },
@@ -90,9 +90,8 @@ export default function SettingsHubScreen() {
         style: 'destructive',
         onPress: async () => {
           haptics.selection();
-          await signOut();
           await resetFinoraSession();
-          await clearTagConfigured();
+          await signOut();
           markTagUnconfigured();
           markIncomplete();
           haptics.success();

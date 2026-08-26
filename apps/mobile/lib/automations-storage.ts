@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+
 export type Automation = {
   id: string;
   name: string;
@@ -8,7 +11,8 @@ export type Automation = {
   status: 'active' | 'paused';
 };
 
-const KEY = 'finora.automations.v1';
+const BASE_KEY = 'finora.automations.v1';
+const key = () => userStorageKey(BASE_KEY);
 const memory = new Map<string, string>();
 
 export const MOCK_AUTOMATIONS: Automation[] = [
@@ -44,6 +48,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -52,10 +57,10 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-export async function listAutomations(): Promise<Automation[]> {
-  const raw = await getItem(KEY);
+export async function listAutomations(storageKey = key()): Promise<Automation[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_AUTOMATIONS));
+    await setItem(storageKey, JSON.stringify(MOCK_AUTOMATIONS));
     return [...MOCK_AUTOMATIONS];
   }
   try {
@@ -70,16 +75,19 @@ export async function setAutomationStatus(
   id: string,
   status: Automation['status'],
 ): Promise<Automation | null> {
-  const items = await listAutomations();
-  const next = items.map((a) => (a.id === id ? { ...a, status } : a));
-  await setItem(KEY, JSON.stringify(next));
-  return next.find((a) => a.id === id) ?? null;
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const items = await listAutomations(storageKey);
+    const next = items.map((a) => (a.id === id ? { ...a, status } : a));
+    await setItem(storageKey, JSON.stringify(next));
+    return next.find((a) => a.id === id) ?? null;
+  });
 }
 
 export async function clearAutomations(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

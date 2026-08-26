@@ -26,7 +26,7 @@ export const SchedulePaymentWizardToolUI = makeAssistantToolUI<
 >({
   toolName: 'schedule_payment_wizard',
   display: 'standalone',
-  render: ({ args, status, addResult }) => {
+  render: function SchedulePaymentWizardToolContent({ args, status, addResult }) {
     const { colors } = useTheme();
 
     if (status.type === 'running' && args == null) {

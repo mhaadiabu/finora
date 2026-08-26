@@ -23,7 +23,7 @@ type ListEmployeesResult = {
 export const ListEmployeesToolUI = makeAssistantToolUI<Record<string, never>, ListEmployeesResult>({
   toolName: 'list_employees',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function ListEmployeesToolContent({ result, status }) {
     const { colors } = useTheme();
     const employees = result?.employees;
 

@@ -13,7 +13,7 @@ type Result = { beneficiaries?: Beneficiary[] };
 export const ListBeneficiariesToolUI = makeAssistantToolUI<Record<string, never>, Result>({
   toolName: 'list_beneficiaries',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function ListBeneficiariesToolContent({ result, status }) {
     const { colors } = useTheme();
     const beneficiaries = result?.beneficiaries;
 

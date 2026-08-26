@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '@/lib/api-url';
 import { getCachedSettings } from '@/lib/settings-storage';
 
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
+
 export type FinoraTagProfile = FinoraTagAccount & {
   initials: string;
 };
@@ -45,7 +47,8 @@ export function suggestFinoraTagFromName(name: string, email?: string) {
 
 /** Prefix search against the global directory never runs below this length. */
 export const FINORA_TAG_GLOBAL_MIN_CHARS = 3;
-const RECENT_KEY = 'finora.finora-tags.recent.v1';
+const BASE_RECENT_KEY = 'finora.finora-tags.recent.v1';
+const recentKey = () => userStorageKey(BASE_RECENT_KEY);
 const RECENT_LIMIT = 12;
 const SUGGESTION_LIMIT = 6;
 type GetToken = () => Promise<string | null>;
@@ -92,6 +95,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -205,12 +209,14 @@ export async function lookupFinoraTag(value: string) {
   return MOCK_FINORA_DIRECTORY.find((profile) => profile.tag === tag) ?? null;
 }
 
-export async function listRecentFinoraTags(): Promise<FinoraTagSuggestion[]> {
-  const raw = await getItem(RECENT_KEY);
+export async function listRecentFinoraTags(
+  storageKey = recentKey(),
+): Promise<FinoraTagSuggestion[]> {
+  const raw = await getItem(storageKey);
   let tags: string[] = [];
   if (!raw) {
     tags = [...SEED_RECENT_TAGS];
-    await setItem(RECENT_KEY, JSON.stringify(tags));
+    await setItem(storageKey, JSON.stringify(tags));
   } else {
     try {
       const parsed = JSON.parse(raw) as string[];
@@ -239,6 +245,7 @@ export async function rememberFinoraTagRecipient(input: {
   country?: string;
 }): Promise<void> {
   const tag = normalizeFinoraTag(input.tag);
+  const storageKey = recentKey();
   if (!tag || tag === getCurrentFinoraTag()) return;
 
   // Keep the mock directory in sync for people we only learned via a transfer.
@@ -255,12 +262,12 @@ export async function rememberFinoraTagRecipient(input: {
     });
   }
 
-  const recent = await listRecentFinoraTags();
+  const recent = await listRecentFinoraTags(storageKey);
   const next = [tag, ...recent.map((item) => item.tag).filter((item) => item !== tag)].slice(
     0,
     RECENT_LIMIT,
   );
-  await setItem(RECENT_KEY, JSON.stringify(next));
+  await setItem(storageKey, JSON.stringify(next));
 }
 
 /**
@@ -290,9 +297,9 @@ export async function searchFinoraTags(query: string): Promise<FinoraTagSuggesti
 }
 
 export async function clearRecentFinoraTags(): Promise<void> {
-  memory.delete(RECENT_KEY);
+  memory.delete(recentKey());
   try {
-    await AsyncStorage.removeItem(RECENT_KEY);
+    await AsyncStorage.removeItem(recentKey());
   } catch {
     // ignore
   }

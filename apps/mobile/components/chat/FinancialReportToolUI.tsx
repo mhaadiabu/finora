@@ -22,7 +22,7 @@ type Result = { report?: FinancialReport };
 export const FinancialReportToolUI = makeAssistantToolUI<{ period?: string }, Result>({
   toolName: 'generate_financial_insights',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function FinancialReportToolContent({ result, status }) {
     const { colors } = useTheme();
     const report = result?.report;
 

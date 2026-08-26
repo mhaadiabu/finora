@@ -335,7 +335,7 @@ function ResolveSendFlow({
 export const ResolveSendToolUI = makeAssistantToolUI<ResolveSendArgs, ResolveSendResult>({
   toolName: 'resolve_send',
   display: 'standalone',
-  render: ({ args, status, addResult }) => {
+  render: function ResolveSendToolContent({ args, status, addResult }) {
     const { colors } = useTheme();
     const hasCandidates = (args?.candidates?.length ?? 0) > 0;
 

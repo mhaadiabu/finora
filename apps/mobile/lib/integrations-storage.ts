@@ -2,7 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { isSmsAvailable } from '@/lib/sms';
 
-const KEY = 'finora.integrations.v1';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
+
+const BASE_KEY = 'finora.integrations.v1';
+const key = () => userStorageKey(BASE_KEY);
 
 export type IntegrationsState = {
   gmailConnected: boolean;
@@ -35,6 +38,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -43,8 +47,8 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-async function readState(): Promise<IntegrationsState> {
-  const raw = await getItem(KEY);
+async function readState(storageKey = key()): Promise<IntegrationsState> {
+  const raw = await getItem(storageKey);
   if (!raw) return { ...DEFAULT };
   try {
     const parsed = JSON.parse(raw) as Partial<IntegrationsState>;
@@ -58,8 +62,8 @@ async function readState(): Promise<IntegrationsState> {
   }
 }
 
-async function writeState(next: IntegrationsState): Promise<IntegrationsState> {
-  await setItem(KEY, JSON.stringify(next));
+async function writeState(storageKey: string, next: IntegrationsState): Promise<IntegrationsState> {
+  await setItem(storageKey, JSON.stringify(next));
   return next;
 }
 
@@ -68,9 +72,10 @@ export async function getIntegrations(): Promise<IntegrationsState> {
 }
 
 export async function connectGmail(email = 'kenneth@finora.business'): Promise<IntegrationsState> {
-  const current = await readState();
+  const storageKey = key();
+  const current = await readState(storageKey);
   const now = new Date().toISOString();
-  return writeState({
+  return writeState(storageKey, {
     ...current,
     gmailConnected: true,
     gmailEmail: email,
@@ -80,8 +85,9 @@ export async function connectGmail(email = 'kenneth@finora.business'): Promise<I
 }
 
 export async function disconnectGmail(): Promise<IntegrationsState> {
-  const current = await readState();
-  return writeState({
+  const storageKey = key();
+  const current = await readState(storageKey);
+  return writeState(storageKey, {
     ...current,
     gmailConnected: false,
     gmailEmail: undefined,
@@ -93,8 +99,9 @@ export async function disconnectGmail(): Promise<IntegrationsState> {
 export async function connectGoogleCalendar(
   email = 'kenneth@finora.business',
 ): Promise<IntegrationsState> {
-  const current = await readState();
-  return writeState({
+  const storageKey = key();
+  const current = await readState(storageKey);
+  return writeState(storageKey, {
     ...current,
     calendarConnected: true,
     calendarEmail: email,
@@ -103,8 +110,9 @@ export async function connectGoogleCalendar(
 }
 
 export async function disconnectGoogleCalendar(): Promise<IntegrationsState> {
-  const current = await readState();
-  return writeState({
+  const storageKey = key();
+  const current = await readState(storageKey);
+  return writeState(storageKey, {
     ...current,
     calendarConnected: false,
     calendarEmail: undefined,
@@ -127,8 +135,9 @@ export async function connectSmsInbox(phone = 'This device'): Promise<ConnectSms
     };
   }
 
-  const current = await readState();
-  const state = await writeState({
+  const storageKey = key();
+  const current = await readState(storageKey);
+  const state = await writeState(storageKey, {
     ...current,
     smsConnected: true,
     smsPhone: phone,
@@ -138,8 +147,9 @@ export async function connectSmsInbox(phone = 'This device'): Promise<ConnectSms
 }
 
 export async function disconnectSmsInbox(): Promise<IntegrationsState> {
-  const current = await readState();
-  return writeState({
+  const storageKey = key();
+  const current = await readState(storageKey);
+  return writeState(storageKey, {
     ...current,
     smsConnected: false,
     smsPhone: undefined,
@@ -148,9 +158,9 @@ export async function disconnectSmsInbox(): Promise<IntegrationsState> {
 }
 
 export async function clearIntegrations(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

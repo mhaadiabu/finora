@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import { AppState } from 'react-native';
 
 import {
@@ -9,8 +10,13 @@ import {
   type VirtualCardStatus,
 } from '@/components/cards/types';
 
-const KEY = 'finora.virtual-cards.v1';
-const UNREAD_KEY = 'finora.virtual-cards.unread.v1';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+
+const BASE_KEY = 'finora.virtual-cards.v1';
+const BASE_UNREAD_KEY = 'finora.virtual-cards.unread.v1';
+const key = () => userStorageKey(BASE_KEY);
+const unreadKey = () => userStorageKey(BASE_UNREAD_KEY);
 
 const memory = new Map<string, string>();
 const listeners = new Set<() => void>();
@@ -25,6 +31,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -48,12 +55,12 @@ export function subscribeVirtualCardIssuance(listener: (card: VirtualCard) => vo
 }
 
 export async function hasUnreadVirtualCards(): Promise<boolean> {
-  return (await getItem(UNREAD_KEY)) === '1';
+  return (await getItem(unreadKey())) === '1';
 }
 
-export async function clearUnreadVirtualCards(): Promise<void> {
-  if (!(await hasUnreadVirtualCards())) return;
-  await setItem(UNREAD_KEY, '0');
+export async function clearUnreadVirtualCards(storageKey = unreadKey()): Promise<void> {
+  if ((await getItem(storageKey)) !== '1') return;
+  await setItem(storageKey, '0');
   notify();
 }
 
@@ -62,12 +69,12 @@ async function publishIssuance(card: VirtualCard) {
     issuanceListeners.forEach((listener) => listener(card));
     return;
   }
-  await setItem(UNREAD_KEY, '1');
+  await setItem(unreadKey(), '1');
   notify();
 }
 
-async function persist(cards: VirtualCard[]) {
-  await setItem(KEY, JSON.stringify(cards));
+async function persist(storageKey: string, cards: VirtualCard[]) {
+  await setItem(storageKey, JSON.stringify(cards));
   notify();
   return cards;
 }
@@ -90,10 +97,10 @@ function mockExpiry() {
   return `${month}/${String(year).padStart(2, '0')}`;
 }
 
-export async function listVirtualCards(): Promise<VirtualCard[]> {
-  const raw = await getItem(KEY);
+export async function listVirtualCards(storageKey = key()): Promise<VirtualCard[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_VIRTUAL_CARDS));
+    await setItem(storageKey, JSON.stringify(MOCK_VIRTUAL_CARDS));
     return [...MOCK_VIRTUAL_CARDS];
   }
   try {
@@ -121,38 +128,47 @@ export async function findVirtualCardByLabel(query: string): Promise<VirtualCard
 }
 
 export async function createVirtualCard(input: CreateVirtualCardInput): Promise<VirtualCard> {
-  const cards = await listVirtualCards();
-  const network = input.network ?? (Math.random() > 0.5 ? 'visa' : 'mastercard');
-  const pan = mockPan(network);
-  const card: VirtualCard = {
-    id: `card_${Date.now().toString(36)}`,
-    label: input.label.trim() || 'Virtual card',
-    last4: pan.slice(-4),
-    network,
-    currency: input.currency ?? 'USD',
-    status: 'active',
-    spendLimit: input.spendLimit,
-    spent: 0,
-    createdAt: new Date().toISOString(),
-    pan,
-    expiry: mockExpiry(),
-    cvv: randomDigits(3),
-  };
-  await persist([card, ...cards]);
-  await publishIssuance(card);
-  return card;
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const cards = await listVirtualCards(storageKey);
+    const network = input.network ?? (Math.random() > 0.5 ? 'visa' : 'mastercard');
+    const pan = mockPan(network);
+    const card: VirtualCard = {
+      id: `card_${Crypto.randomUUID()}`,
+      label: input.label.trim() || 'Virtual card',
+      last4: pan.slice(-4),
+      network,
+      currency: input.currency ?? 'USD',
+      status: 'active',
+      spendLimit: input.spendLimit,
+      spent: 0,
+      createdAt: new Date().toISOString(),
+      pan,
+      expiry: mockExpiry(),
+      cvv: randomDigits(3),
+    };
+    await persist(storageKey, [card, ...cards]);
+    await publishIssuance(card);
+    return card;
+  });
 }
 
 export async function updateVirtualCard(
   id: string,
   patch: Partial<Pick<VirtualCard, 'status' | 'spendLimit' | 'label' | 'spent'>>,
 ): Promise<VirtualCard | null> {
-  const cards = await listVirtualCards();
-  const idx = cards.findIndex((c) => c.id === id);
-  if (idx < 0) return null;
-  const next: VirtualCard = { ...cards[idx]!, ...patch };
-  await persist(cards.map((c, i) => (i === idx ? next : c)));
-  return next;
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const cards = await listVirtualCards(storageKey);
+    const idx = cards.findIndex((c) => c.id === id);
+    if (idx < 0) return null;
+    const next: VirtualCard = { ...cards[idx]!, ...patch };
+    await persist(
+      storageKey,
+      cards.map((c, i) => (i === idx ? next : c)),
+    );
+    return next;
+  });
 }
 
 export async function setVirtualCardStatus(
@@ -163,6 +179,8 @@ export async function setVirtualCardStatus(
 }
 
 export async function clearVirtualCards(): Promise<void> {
-  await persist([]);
-  await clearUnreadVirtualCards();
+  const cardsKey = key();
+  const unreadStorageKey = unreadKey();
+  await persist(cardsKey, []);
+  await clearUnreadVirtualCards(unreadStorageKey);
 }

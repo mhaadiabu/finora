@@ -14,7 +14,7 @@ type Result = { expenses?: BusinessExpense[]; total?: number; currency?: string 
 export const ListExpensesToolUI = makeAssistantToolUI<Record<string, never>, Result>({
   toolName: 'list_expenses',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function ListExpensesToolContent({ result, status }) {
     const { colors } = useTheme();
     const expenses = result?.expenses;
 

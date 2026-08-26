@@ -6,9 +6,11 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getApiUrl } from './api-url';
+import { userStorageKey } from './session-storage';
 
 type GetToken = () => Promise<string | null>;
-const CACHE_KEY = 'finora.remote-invoices.v1';
+const BASE_CACHE_KEY = 'finora.remote-invoices.v1';
+const cacheKey = () => userStorageKey(BASE_CACHE_KEY);
 
 async function request(path: string, getToken: GetToken, init?: RequestInit) {
   const apiUrl = getApiUrl();
@@ -24,13 +26,14 @@ async function request(path: string, getToken: GetToken, init?: RequestInit) {
 }
 
 export async function getRemoteInvoices(getToken: GetToken) {
+  const storageKey = cacheKey();
   const result = InvoiceListResponseSchema.parse(await request('', getToken));
-  await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(result)).catch(() => undefined);
+  await AsyncStorage.setItem(storageKey, JSON.stringify(result)).catch(() => undefined);
   return result;
 }
 
 export async function getCachedRemoteInvoices() {
-  const raw = await AsyncStorage.getItem(CACHE_KEY).catch(() => null);
+  const raw = await AsyncStorage.getItem(cacheKey()).catch(() => null);
   if (!raw) return null;
   return InvoiceListResponseSchema.safeParse(JSON.parse(raw)).data ?? null;
 }

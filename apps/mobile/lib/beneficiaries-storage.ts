@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
+
 export type Beneficiary = {
   id: string;
   name: string;
@@ -12,7 +14,8 @@ export type Beneficiary = {
   rail?: string;
 };
 
-const KEY = 'finora.beneficiaries.v1';
+const BASE_KEY = 'finora.beneficiaries.v1';
+const key = () => userStorageKey(BASE_KEY);
 const memory = new Map<string, string>();
 
 export const MOCK_BENEFICIARIES: Beneficiary[] = [
@@ -60,6 +63,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -68,10 +72,10 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-export async function listBeneficiaries(): Promise<Beneficiary[]> {
-  const raw = await getItem(KEY);
+export async function listBeneficiaries(storageKey = key()): Promise<Beneficiary[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_BENEFICIARIES));
+    await setItem(storageKey, JSON.stringify(MOCK_BENEFICIARIES));
     return [...MOCK_BENEFICIARIES];
   }
   try {
@@ -83,9 +87,9 @@ export async function listBeneficiaries(): Promise<Beneficiary[]> {
 }
 
 export async function clearBeneficiaries(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

@@ -247,6 +247,7 @@ function useVoiceComposer() {
   const speechDetectedRef = useRef(false);
   const voiceActivitySamplesRef = useRef(0);
   const lastVoiceActivityAtRef = useRef(0);
+  const stopRecordingRef = useRef<(discard?: boolean) => Promise<void>>(() => Promise.resolve());
 
   voiceStateRef.current = voiceState;
 
@@ -306,11 +307,12 @@ function useVoiceComposer() {
       if (voiceSessionRef.current === sessionId) updateVoiceState('idle');
     }
   };
+  stopRecordingRef.current = stopRecording;
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState !== 'active' && voiceStateRef.current === 'recording') {
-        void stopRecording(true);
+        void stopRecordingRef.current(true);
       }
     });
 
@@ -335,13 +337,13 @@ function useVoiceComposer() {
     updateSpeechActive(false);
     if (!speechDetectedRef.current) {
       if (recorderState.durationMillis >= INITIAL_SILENCE_TIMEOUT_MS) {
-        void stopRecording(true);
+        void stopRecordingRef.current(true);
       }
       return;
     }
 
     if (now - lastVoiceActivityAtRef.current >= TRAILING_SILENCE_TIMEOUT_MS) {
-      void stopRecording(false);
+      void stopRecordingRef.current(false);
     }
   }, [recorderState.durationMillis, recorderState.metering, voiceState]);
 
@@ -828,7 +830,7 @@ export function Composer() {
                   ? 'Deep research mode'
                   : slashMode.includes('shop') || slashMode.includes('product')
                     ? 'Product search mode'
-                  : 'Web search mode'}
+                    : 'Web search mode'}
               </Text>
             </View>
           ) : null}

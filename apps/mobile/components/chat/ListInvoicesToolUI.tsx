@@ -68,7 +68,7 @@ function normalizeInvoice(value: unknown): Invoice | null {
 export const ListInvoicesToolUI = makeAssistantToolUI<ListInvoicesArgs, ListInvoicesResult>({
   toolName: 'list_invoices',
   display: 'standalone',
-  render: ({ args, result, status }) => {
+  render: function ListInvoicesToolContent({ args, result, status }) {
     const { colors } = useTheme();
     const invoices = result?.invoices?.flatMap((value) => {
       const invoice = normalizeInvoice(value);

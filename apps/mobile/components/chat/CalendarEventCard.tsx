@@ -62,35 +62,40 @@ export function CalendarEventCard({ event: initial }: { event: CalendarMoneyEven
       if (cancelled || finishedRef.current) return;
       finishedRef.current = true;
       const txId = mockTransactionId();
-      const updated = await markCalendarEventPaid(event.id, txId);
-      if (updated) setEvent(updated);
-      setPhase('paid');
-      haptics.success();
-      if (event.amount && event.currency && event.counterparty) {
-        await recordSentPayment({
-          payment: {
-            amount: event.amount,
-            currency: event.currency,
-            recipientName: event.counterparty,
-            destination: {
-              kind: 'bank_account',
-              label: 'Calendar payment',
-              value: event.title,
+      try {
+        const updated = await markCalendarEventPaid(event.id, txId);
+        if (updated) setEvent(updated);
+        setPhase('paid');
+        haptics.success();
+        if (event.amount && event.currency && event.counterparty) {
+          await recordSentPayment({
+            payment: {
+              amount: event.amount,
+              currency: event.currency,
+              recipientName: event.counterparty,
+              destination: {
+                kind: 'bank_account',
+                label: 'Calendar payment',
+                value: event.title,
+              },
+              reference: event.title,
             },
-            reference: event.title,
-          },
-          transactionId: txId,
-          source: 'chat',
-        });
+            transactionId: txId,
+            source: 'chat',
+          });
+        }
+        appendAgentFollowUp(
+          aui,
+          `Paid ${event.title}${
+            event.amount && event.currency
+              ? ` (${formatPaymentAmount(event.amount, event.currency)})`
+              : ''
+          }. Ref ${txId}.`,
+        );
+      } catch {
+        finishedRef.current = false;
+        setPhase('idle');
       }
-      appendAgentFollowUp(
-        aui,
-        `Paid ${event.title}${
-          event.amount && event.currency
-            ? ` (${formatPaymentAmount(event.amount, event.currency)})`
-            : ''
-        }. Ref ${txId}.`,
-      );
     };
     void run();
     return () => {

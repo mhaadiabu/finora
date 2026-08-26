@@ -14,7 +14,7 @@ type Result = { overview?: TreasuryOverview };
 export const TreasuryOverviewToolUI = makeAssistantToolUI<Record<string, never>, Result>({
   toolName: 'get_treasury_overview',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function TreasuryOverviewToolContent({ result, status }) {
     const { colors } = useTheme();
     const overview = result?.overview;
 

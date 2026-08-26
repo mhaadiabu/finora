@@ -19,7 +19,7 @@ export const ListPoliciesToolUI = makeAssistantToolUI<
 >({
   toolName: 'list_policies',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function ListPoliciesToolContent({ result, status }) {
     const { colors } = useTheme();
     const policies = result?.policies;
     const simulation = result?.simulation;

@@ -5,8 +5,10 @@ import { createAssistantStream, type AssistantStream } from 'assistant-stream';
 import * as Crypto from 'expo-crypto';
 
 import { fallbackThreadTitle } from './remote-thread-adapter';
+import { userStorageKey } from './session-storage';
 
 const LOCAL_THREADS_KEY = 'finora:local-threads:v1';
+const localThreadsKey = () => userStorageKey(LOCAL_THREADS_KEY);
 
 export type LocalThreadItem = {
   remoteId: string;
@@ -33,7 +35,7 @@ function toLocalItem(stored: StoredLocalThread): LocalThreadItem {
 
 async function readStoredThreads(): Promise<StoredLocalThread[]> {
   try {
-    const raw = await AsyncStorage.getItem(LOCAL_THREADS_KEY);
+    const raw = await AsyncStorage.getItem(localThreadsKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -44,7 +46,7 @@ async function readStoredThreads(): Promise<StoredLocalThread[]> {
 
 async function writeStoredThreads(threads: StoredLocalThread[]) {
   try {
-    await AsyncStorage.setItem(LOCAL_THREADS_KEY, JSON.stringify(threads));
+    await AsyncStorage.setItem(localThreadsKey(), JSON.stringify(threads));
   } catch {
     // Ignore storage errors
   }

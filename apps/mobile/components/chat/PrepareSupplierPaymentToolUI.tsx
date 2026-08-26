@@ -179,7 +179,7 @@ export const PrepareSupplierPaymentToolUI = makeAssistantToolUI<
 >({
   toolName: 'prepare_supplier_payment',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function PrepareSupplierPaymentToolContent({ result, status }) {
     const { colors } = useTheme();
     const supplier = result?.supplier;
     const amount = result?.amount;

@@ -16,7 +16,7 @@ type ListSuppliersResult = {
 export const ListSuppliersToolUI = makeAssistantToolUI<Record<string, never>, ListSuppliersResult>({
   toolName: 'list_suppliers',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function ListSuppliersToolContent({ result, status }) {
     const { colors } = useTheme();
     const suppliers = result?.suppliers;
 

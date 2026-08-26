@@ -15,3 +15,7 @@ export function takePendingPaymentLink(): string | null {
 export function peekPendingPaymentLink(): string | null {
   return pendingPreparationId;
 }
+
+export function clearPendingPaymentLink() {
+  pendingPreparationId = null;
+}

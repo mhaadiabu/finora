@@ -21,7 +21,7 @@ import { Redirect, Stack, useSegments, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
@@ -92,6 +92,7 @@ import {
   requestRemoteThreadTitle,
   type RemoteThreadConfig,
 } from '@/lib/remote-thread-adapter';
+import { setActiveUserId } from '@/lib/session-storage';
 import { SettingsProvider } from '@/lib/settings-context';
 import { useDrainPendingPaymentLink } from '@/lib/use-drain-pending-payment-link';
 import { useProfileSync } from '@/lib/use-profile-sync';
@@ -128,7 +129,7 @@ function RootNavigator() {
   const { isLoaded: authLoaded, isSignedIn } = useAuth();
   const { status: phoneStatus } = usePhoneGate();
   const { tagConfigured } = useAuthGate();
-  const { locked: passcodeLocked } = usePasscodeGate();
+  const { enabled: passcodeEnabled, lock, locked: passcodeLocked } = usePasscodeGate();
   const { completed: onboardingCompleted } = useOnboardingGate();
   const [firstSegment, ...remainingSegments] = useSegments();
   const [secondSegment] = remainingSegments as string[];
@@ -140,11 +141,22 @@ function RootNavigator() {
       secondSegment === 'enter-passcode');
   const isEnterPasscodeScreen = firstSegment === 'auth' && secondSegment === 'enter-passcode';
   const requiresPasscode =
-    onboardingCompleted && authLoaded && isSignedIn && tagConfigured && passcodeLocked;
+    onboardingCompleted &&
+    authLoaded &&
+    isSignedIn &&
+    tagConfigured &&
+    passcodeEnabled &&
+    passcodeLocked;
   const concealProtectedContent =
     Boolean(isSignedIn) &&
     ((requiresPasscode && !isEnterPasscodeScreen) || (!tagConfigured && phoneStatus === 'loading'));
   useDrainPendingPaymentLink();
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'inactive' || state === 'background') lock();
+    });
+    return () => subscription.remove();
+  }, [lock]);
   const base = isDark ? DarkTheme : DefaultTheme;
   const navTheme: Theme = {
     ...base,
@@ -292,9 +304,17 @@ function LocalFinoraAssistantRuntime({ getToken }: { getToken: () => Promise<str
 }
 
 function RemoteFinoraAssistantRuntime({ config }: { config: RemoteChatRuntime }) {
-  const threadListAdapter = useMemo(
-    () => createRemoteThreadAdapter(config),
+  const runtimeConfig = useMemo(
+    () => ({
+      apiUrl: config.apiUrl,
+      getToken: config.getToken,
+      userId: config.userId,
+    }),
     [config.apiUrl, config.getToken, config.userId],
+  );
+  const threadListAdapter = useMemo(
+    () => createRemoteThreadAdapter(runtimeConfig),
+    [runtimeConfig],
   );
   const runtime = useRemoteThreadListRuntime({
     adapter: threadListAdapter,
@@ -302,8 +322,11 @@ function RemoteFinoraAssistantRuntime({ config }: { config: RemoteChatRuntime })
       const localThreadId = useAuiState((state) => state.threadListItem.id);
       const remoteId = useAuiState((state) => state.threadListItem.remoteId);
       const adapters = useMemo(
-        () => createRemoteThreadRuntimeAdapters(config, localThreadId ?? null),
-        [config.apiUrl, config.userId, localThreadId],
+        () => createRemoteThreadRuntimeAdapters(runtimeConfig, localThreadId ?? null),
+        // The memoized config object carries the complete remote adapter identity.
+        // The hooks rule cannot model that object identity through its properties.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [localThreadId, runtimeConfig.apiUrl, runtimeConfig.getToken, runtimeConfig.userId],
       );
 
       useEffect(() => {
@@ -357,13 +380,24 @@ function RootApp() {
     userId: string | null;
     remoteChat: RemoteChatRuntime | null;
   } | null>(null);
-  const bootReady = fontsLoaded && clerkLoaded && boot !== null && boot.userId === (userId ?? null);
+  const [storageUserId, setStorageUserId] = useState<string | null | undefined>(undefined);
+  const bootReady =
+    fontsLoaded &&
+    clerkLoaded &&
+    storageUserId !== undefined &&
+    boot !== null &&
+    boot.userId === (userId ?? null);
   const { showOverlay, reducedMotion, progress, overlayOpacity, onOverlayLayout } =
     useSplashGate(bootReady);
 
   useEffect(() => {
     let cancelled = false;
+    setStorageUserId(undefined);
+    setBoot(null);
     void (async () => {
+      await setActiveUserId(userId ?? null);
+      if (cancelled) return;
+      setStorageUserId(userId ?? null);
       const remoteChatPromise = (async (): Promise<RemoteChatRuntime | null> => {
         const apiUrl = getApiUrl();
         if (env.EXPO_PUBLIC_REMOTE_CHAT_ENABLED !== 'true' || !apiUrl || !userId) return null;
@@ -376,7 +410,7 @@ function RootApp() {
         remoteChatPromise,
       ]);
       if (cancelled) return;
-      if (onboarding.accountType) setAccountType(onboarding.accountType);
+      setAccountType(onboarding.accountType ?? 'personal');
       setBoot({
         onboardingCompleted: onboarding.completed,
         tagConfigured,
@@ -392,42 +426,47 @@ function RootApp() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: SPLASH_BACKGROUND }}>
-      <SettingsProvider>
-        {!bootReady || boot === null ? (
-          <SplashPlaceholder />
-        ) : (
-          <AuthGateProvider tagConfigured={boot.tagConfigured}>
-            <OnboardingGateProvider completed={boot.onboardingCompleted}>
-              <PhoneGateProvider key={boot.userId ?? 'signed-out'}>
-                <PasscodeGateProvider
-                  key={boot.userId ?? 'signed-out'}
-                  initiallyLocked={Boolean(
-                    boot.userId && boot.tagConfigured && boot.passcodeExists,
-                  )}
-                >
-                  <ProfileSyncBridge />
-                  <FinoraAssistantRuntime
-                    key={boot.remoteChat ? (boot.userId ?? 'remote') : 'local'}
-                    remoteChat={boot.remoteChat}
-                    getToken={stableGetToken}
-                  />
-                </PasscodeGateProvider>
-              </PhoneGateProvider>
-            </OnboardingGateProvider>
-          </AuthGateProvider>
-        )}
-        {showOverlay ? (
-          <SplashOverlay
-            progress={progress}
-            opacity={overlayOpacity}
-            reducedMotion={reducedMotion}
-            onLayout={onOverlayLayout}
-          />
-        ) : null}
-        <StatusBarBackdrop />
-        {/* Covers UI in App Switcher / Recents so balances aren't previewed. */}
-        <AppSwitcherPrivacy />
-      </SettingsProvider>
+      {storageUserId !== undefined ? (
+        <SettingsProvider key={storageUserId ?? 'signed-out'}>
+          {!bootReady || boot === null ? (
+            <SplashPlaceholder />
+          ) : (
+            <AuthGateProvider tagConfigured={boot.tagConfigured}>
+              <OnboardingGateProvider completed={boot.onboardingCompleted}>
+                <PhoneGateProvider key={boot.userId ?? 'signed-out'}>
+                  <PasscodeGateProvider
+                    key={boot.userId ?? 'signed-out'}
+                    enabled={boot.passcodeExists}
+                    initiallyLocked={Boolean(
+                      boot.userId && boot.tagConfigured && boot.passcodeExists,
+                    )}
+                  >
+                    <ProfileSyncBridge />
+                    <FinoraAssistantRuntime
+                      key={boot.remoteChat ? (boot.userId ?? 'remote') : 'local'}
+                      remoteChat={boot.remoteChat}
+                      getToken={stableGetToken}
+                    />
+                  </PasscodeGateProvider>
+                </PhoneGateProvider>
+              </OnboardingGateProvider>
+            </AuthGateProvider>
+          )}
+          {showOverlay ? (
+            <SplashOverlay
+              progress={progress}
+              opacity={overlayOpacity}
+              reducedMotion={reducedMotion}
+              onLayout={onOverlayLayout}
+            />
+          ) : null}
+          <StatusBarBackdrop />
+          {/* Covers UI in App Switcher / Recents so balances aren't previewed. */}
+          <AppSwitcherPrivacy />
+        </SettingsProvider>
+      ) : (
+        <SplashPlaceholder />
+      )}
     </GestureHandlerRootView>
   );
 }

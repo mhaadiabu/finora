@@ -13,7 +13,7 @@ type Result = { automations?: Automation[] };
 export const ListAutomationsToolUI = makeAssistantToolUI<Record<string, never>, Result>({
   toolName: 'list_automations',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function ListAutomationsToolContent({ result, status }) {
     const { colors } = useTheme();
     const automations = result?.automations;
 

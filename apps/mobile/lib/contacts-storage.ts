@@ -1,9 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 
 import type { SupportedCurrency } from '@/components/ui/currency-icon';
 
 import { MOCK_CONTACTS, type Contact } from '@/components/contacts/types';
-const KEY = 'finora.contacts.v2';
+
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+const BASE_KEY = 'finora.contacts.v2';
+const key = () => userStorageKey(BASE_KEY);
 
 const memory = new Map<string, string>();
 
@@ -16,6 +21,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -31,10 +37,10 @@ function initialsFromName(name: string) {
   return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase();
 }
 
-export async function listContacts(): Promise<Contact[]> {
-  const raw = await getItem(KEY);
+export async function listContacts(storageKey = key()): Promise<Contact[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_CONTACTS));
+    await setItem(storageKey, JSON.stringify(MOCK_CONTACTS));
     return [...MOCK_CONTACTS];
   }
   try {
@@ -51,7 +57,7 @@ export async function listContacts(): Promise<Contact[]> {
       )
       .map(({ handle: _legacyContactHandle, ...contact }) => contact);
     if (JSON.stringify(cleaned) !== raw) {
-      await setItem(KEY, JSON.stringify(cleaned));
+      await setItem(storageKey, JSON.stringify(cleaned));
     }
     return cleaned;
   } catch {
@@ -72,39 +78,45 @@ export async function saveContact(input: {
   identifier: string;
   favourite?: boolean;
 }): Promise<Contact> {
-  const contacts = await listContacts();
-  const existing = await findContactByIdentifier(input.identifier);
-  if (existing) {
-    const updated: Contact = {
-      ...existing,
-      name: input.name || existing.name,
-      method: input.method || existing.method,
-      currency: (input.currency as SupportedCurrency) || existing.currency,
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const contacts = await listContacts(storageKey);
+    const needle = input.identifier.replace(/\s+/g, '').toLowerCase();
+    const existing = contacts.find(
+      (c) => c.identifier.replace(/\s+/g, '').toLowerCase() === needle,
+    );
+    if (existing) {
+      const updated: Contact = {
+        ...existing,
+        name: input.name || existing.name,
+        method: input.method || existing.method,
+        currency: (input.currency as SupportedCurrency) || existing.currency,
+        lastTxDate: new Date().toISOString(),
+      };
+      const next = contacts.map((c) => (c.id === existing.id ? updated : c));
+      await setItem(storageKey, JSON.stringify(next));
+      return updated;
+    }
+
+    const contact: Contact = {
+      id: `c-${Crypto.randomUUID()}`,
+      name: input.name.trim() || 'Contact',
+      initials: initialsFromName(input.name),
+      currency: (input.currency as SupportedCurrency) || 'USD',
+      method: input.method,
+      identifier: input.identifier,
+      favourite: input.favourite ?? false,
       lastTxDate: new Date().toISOString(),
     };
-    const next = contacts.map((c) => (c.id === existing.id ? updated : c));
-    await setItem(KEY, JSON.stringify(next));
-    return updated;
-  }
-
-  const contact: Contact = {
-    id: `c-${Date.now()}`,
-    name: input.name.trim() || 'Contact',
-    initials: initialsFromName(input.name),
-    currency: (input.currency as SupportedCurrency) || 'USD',
-    method: input.method,
-    identifier: input.identifier,
-    favourite: input.favourite ?? false,
-    lastTxDate: new Date().toISOString(),
-  };
-  await setItem(KEY, JSON.stringify([contact, ...contacts]));
-  return contact;
+    await setItem(storageKey, JSON.stringify([contact, ...contacts]));
+    return contact;
+  });
 }
 
 export async function clearContacts(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

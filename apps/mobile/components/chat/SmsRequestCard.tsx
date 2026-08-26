@@ -54,37 +54,42 @@ export function SmsRequestCard({ request: initial }: { request: SmsPaymentReques
       if (cancelled || finishedRef.current) return;
       finishedRef.current = true;
       const txId = mockTransactionId();
-      const updated = await markSmsRequestPaid(request.id, txId);
-      if (updated) setRequest(updated);
-      setPhase('paid');
-      haptics.success();
-      if (request.amount && request.currency) {
-        await recordSentPayment({
-          payment: {
-            amount: request.amount,
-            currency: request.currency,
-            recipientName: request.fromName,
-            destination: {
-              kind: request.network?.toLowerCase().includes('momo')
-                ? 'mobile_money'
-                : 'bank_account',
-              label: request.network ?? 'SMS request',
-              value: request.fromPhone,
+      try {
+        const updated = await markSmsRequestPaid(request.id, txId);
+        if (updated) setRequest(updated);
+        setPhase('paid');
+        haptics.success();
+        if (request.amount && request.currency) {
+          await recordSentPayment({
+            payment: {
+              amount: request.amount,
+              currency: request.currency,
+              recipientName: request.fromName,
+              destination: {
+                kind: request.network?.toLowerCase().includes('momo')
+                  ? 'mobile_money'
+                  : 'bank_account',
+                label: request.network ?? 'SMS request',
+                value: request.fromPhone,
+              },
+              reference: `SMS from ${request.fromName}`,
             },
-            reference: `SMS from ${request.fromName}`,
-          },
-          transactionId: txId,
-          source: 'chat',
-        });
+            transactionId: txId,
+            source: 'chat',
+          });
+        }
+        appendAgentFollowUp(
+          aui,
+          `Paid ${request.fromName}${
+            request.amount && request.currency
+              ? ` ${formatPaymentAmount(request.amount, request.currency)}`
+              : ''
+          } from an SMS request. Ref ${txId}.`,
+        );
+      } catch {
+        finishedRef.current = false;
+        setPhase('idle');
       }
-      appendAgentFollowUp(
-        aui,
-        `Paid ${request.fromName}${
-          request.amount && request.currency
-            ? ` ${formatPaymentAmount(request.amount, request.currency)}`
-            : ''
-        } from an SMS request. Ref ${txId}.`,
-      );
     };
     void run();
     return () => {

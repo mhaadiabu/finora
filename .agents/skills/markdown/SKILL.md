@@ -1,6 +1,6 @@
 ---
 name: markdown
-description: 'Render and customize assistant message text as markdown in assistant-ui. Use when displaying model output as formatted markdown with MarkdownTextPrimitive from @assistant-ui/react-markdown wired into the MessagePrimitive.Parts text branch, configuring remarkPlugins (remark-gfm, remark-math) and rehypePlugins (rehype-katex), or memoizing components with unstable_memoizeMarkdownComponents. Covers code-block syntax highlighting via react-shiki or react-syntax-highlighter registered as SyntaxHighlighter in components/componentsByLanguage, LaTeX math rendering with KaTeX, Mermaid diagrams gated on stream completion, custom math delimiters via preprocess, and the StreamdownTextPrimitive alternative from @assistant-ui/react-streamdown with built-in Shiki/KaTeX/Mermaid and block streaming. For general chat UI composition route to primitives.'
+description: 'Render and customize assistant message markdown in web assistant-ui with @assistant-ui/react-markdown or React Streamdown. Covers plugins, code highlighting, math, Mermaid, custom delimiters, and streaming. For Expo or @assistant-ui/react-native markdown, use the repository finora-mobile skill instead.'
 license: MIT
 ---
 

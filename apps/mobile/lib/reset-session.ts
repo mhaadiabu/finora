@@ -20,6 +20,8 @@ import { clearSmsRequests } from '@/lib/sms-requests-storage';
 import { clearSuppliers } from '@/lib/suppliers-storage';
 import { clearTransactions } from '@/lib/transactions-storage';
 
+import { blockActiveUserStorageWrites, clearActiveUserStorage } from './session-storage';
+
 const KEYS = [
   'finora.auth.tagConfigured',
   'finora.auth.tagConfiguredUserId',
@@ -48,6 +50,7 @@ const KEYS = [
 
 /** Clears auth + onboarding + passcode + local demo persistence. */
 export async function resetFinoraSession(): Promise<void> {
+  blockActiveUserStorageWrites();
   try {
     await AsyncStorage.multiRemove([...KEYS]);
   } catch {
@@ -73,4 +76,5 @@ export async function resetFinoraSession(): Promise<void> {
   await clearSettings();
   await clearMemoryStore();
   setAccountType('personal');
+  await clearActiveUserStorage();
 }

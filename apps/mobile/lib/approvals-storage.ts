@@ -6,7 +6,11 @@ import {
   type ApprovalStatus,
 } from '@/components/approvals/types';
 
-const KEY = 'finora.approvals.v2';
+import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+
+const BASE_KEY = 'finora.approvals.v2';
+const key = () => userStorageKey(BASE_KEY);
 
 const memory = new Map<string, string>();
 
@@ -19,6 +23,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -27,10 +32,10 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-export async function listApprovals(): Promise<ApprovalRequest[]> {
-  const raw = await getItem(KEY);
+export async function listApprovals(storageKey = key()): Promise<ApprovalRequest[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_APPROVALS));
+    await setItem(storageKey, JSON.stringify(MOCK_APPROVALS));
     return [...MOCK_APPROVALS];
   }
   try {
@@ -55,14 +60,15 @@ export async function updateApproval(
   id: string,
   patch: Partial<Pick<ApprovalRequest, 'status' | 'resolvedAt' | 'transactionId'>>,
 ): Promise<ApprovalRequest | null> {
-  const items = await listApprovals();
-  const idx = items.findIndex((a) => a.id === id);
-  if (idx < 0) return null;
-  const current = items[idx]!;
-  const next: ApprovalRequest = { ...current, ...patch };
-  const list = items.map((a, i) => (i === idx ? next : a));
-  await setItem(KEY, JSON.stringify(list));
-  return next;
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const items = await listApprovals(storageKey);
+    const idx = items.findIndex((a) => a.id === id);
+    if (idx < 0) return null;
+    const next: ApprovalRequest = { ...items[idx]!, ...patch };
+    await setItem(storageKey, JSON.stringify(items.map((a, i) => (i === idx ? next : a))));
+    return next;
+  });
 }
 
 export async function resolveApproval(
@@ -78,9 +84,9 @@ export async function resolveApproval(
 }
 
 export async function clearApprovals(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

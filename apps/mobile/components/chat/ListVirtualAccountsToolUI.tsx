@@ -13,7 +13,7 @@ type Result = { accounts?: ReceiveMethod[] };
 export const ListVirtualAccountsToolUI = makeAssistantToolUI<Record<string, never>, Result>({
   toolName: 'list_virtual_accounts',
   display: 'standalone',
-  render: ({ result, status }) => {
+  render: function ListVirtualAccountsToolContent({ result, status }) {
     const { colors } = useTheme();
     const accounts = result?.accounts;
 

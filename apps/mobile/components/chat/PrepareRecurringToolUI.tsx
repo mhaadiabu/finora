@@ -52,7 +52,7 @@ export const PrepareRecurringToolUI = makeAssistantToolUI<
 >({
   toolName: 'prepare_recurring',
   display: 'standalone',
-  render: ({ args, status, addResult }) => {
+  render: function PrepareRecurringToolContent({ args, status, addResult }) {
     const { colors } = useTheme();
     const hasArgs = args != null && (args.amount != null || Boolean(args.recipientName));
 

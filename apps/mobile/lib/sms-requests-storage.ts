@@ -1,5 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import {
+  isUserStorageKeyWritable,
+  isUserStorageOperationBlocked,
+  userStorageKey,
+} from './session-storage';
+import { serializeStorageMutation } from './storage-mutation';
+
 export type SmsPaymentRequest = {
   id: string;
   fromName: string;
@@ -13,7 +20,8 @@ export type SmsPaymentRequest = {
   transactionId?: string;
 };
 
-const KEY = 'finora.sms-requests.v1';
+const BASE_KEY = 'finora.sms-requests.v1';
+const key = () => userStorageKey(BASE_KEY);
 const memory = new Map<string, string>();
 
 function hoursAgo(hours: number) {
@@ -65,6 +73,7 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 async function setItem(key: string, value: string): Promise<void> {
+  if (!isUserStorageKeyWritable(key)) return;
   memory.set(key, value);
   try {
     await AsyncStorage.setItem(key, value);
@@ -73,10 +82,10 @@ async function setItem(key: string, value: string): Promise<void> {
   }
 }
 
-export async function listSmsPaymentRequests(): Promise<SmsPaymentRequest[]> {
-  const raw = await getItem(KEY);
+export async function listSmsPaymentRequests(storageKey = key()): Promise<SmsPaymentRequest[]> {
+  const raw = await getItem(storageKey);
   if (!raw) {
-    await setItem(KEY, JSON.stringify(MOCK_SMS_REQUESTS));
+    await setItem(storageKey, JSON.stringify(MOCK_SMS_REQUESTS));
     return [...MOCK_SMS_REQUESTS];
   }
   try {
@@ -98,27 +107,35 @@ export async function markSmsRequestPaid(
   id: string,
   transactionId: string,
 ): Promise<SmsPaymentRequest | null> {
-  const requests = await listSmsPaymentRequests();
-  const next = requests.map((request) =>
-    request.id === id ? { ...request, status: 'paid' as const, transactionId } : request,
-  );
-  await setItem(KEY, JSON.stringify(next));
-  return next.find((request) => request.id === id) ?? null;
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const requests = await listSmsPaymentRequests(storageKey);
+    const next = requests.map((request) =>
+      request.id === id ? { ...request, status: 'paid' as const, transactionId } : request,
+    );
+    if (isUserStorageOperationBlocked(storageKey))
+      throw new Error('Account changed during payment.');
+    await setItem(storageKey, JSON.stringify(next));
+    return next.find((request) => request.id === id) ?? null;
+  });
 }
 
 export async function dismissSmsRequest(id: string): Promise<SmsPaymentRequest | null> {
-  const requests = await listSmsPaymentRequests();
-  const next = requests.map((request) =>
-    request.id === id ? { ...request, status: 'dismissed' as const } : request,
-  );
-  await setItem(KEY, JSON.stringify(next));
-  return next.find((request) => request.id === id) ?? null;
+  const storageKey = key();
+  return serializeStorageMutation(storageKey, async () => {
+    const requests = await listSmsPaymentRequests(storageKey);
+    const next = requests.map((request) =>
+      request.id === id ? { ...request, status: 'dismissed' as const } : request,
+    );
+    await setItem(storageKey, JSON.stringify(next));
+    return next.find((request) => request.id === id) ?? null;
+  });
 }
 
 export async function clearSmsRequests(): Promise<void> {
-  memory.delete(KEY);
+  memory.delete(key());
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(key());
   } catch {
     // ignore
   }

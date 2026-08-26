@@ -1,65 +1,88 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
+import * as SecureStore from 'expo-secure-store';
 
-const KEY = 'finora.passcode.hash';
+import { getActiveUserId, userStorageKey } from './session-storage';
+
+const LEGACY_KEY = 'finora.passcode.hash';
+const VERIFIER_KEY = 'finora.passcode.verifier.v2';
 export const PASSCODE_LENGTH = 6;
 
-const memory = new Map<string, string>();
+type PasscodeVerifier = { version: 2; salt: string; digest: string };
+const passcodeListeners = new Set<() => void>();
 
-async function getItem(key: string): Promise<string | null> {
+/** Track SecureStore verifier changes so lifecycle locks stay accurate. */
+export function subscribeToPasscodeChanges(listener: () => void) {
+  passcodeListeners.add(listener);
+  return () => {
+    passcodeListeners.delete(listener);
+  };
+}
+
+function notifyPasscodeChanged() {
+  passcodeListeners.forEach((listener) => listener());
+}
+
+async function secureStoreAvailable() {
+  return SecureStore.isAvailableAsync().catch(() => false);
+}
+
+async function digestPasscode(passcode: string, salt: string) {
+  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, `${salt}:${passcode}`);
+}
+
+async function readVerifier() {
+  if (!(await secureStoreAvailable())) return null;
+  const raw = await SecureStore.getItemAsync(userStorageKey(VERIFIER_KEY)).catch(() => null);
+  if (!raw) return null;
   try {
-    return await AsyncStorage.getItem(key);
+    const parsed = JSON.parse(raw) as Partial<PasscodeVerifier>;
+    return parsed.version === 2 && parsed.salt && parsed.digest
+      ? (parsed as PasscodeVerifier)
+      : null;
   } catch {
-    return memory.get(key) ?? null;
+    return null;
   }
 }
 
-async function setItem(key: string, value: string): Promise<void> {
-  memory.set(key, value);
-  try {
-    await AsyncStorage.setItem(key, value);
-  } catch {
-    // Still valid for this process via memory.
-  }
+/** Legacy AsyncStorage verifiers are removed and require a new passcode. */
+async function removeLegacyVerifier() {
+  await AsyncStorage.removeItem(LEGACY_KEY).catch(() => undefined);
+  await AsyncStorage.removeItem(userStorageKey(LEGACY_KEY)).catch(() => undefined);
 }
 
-async function removeItem(key: string): Promise<void> {
-  memory.delete(key);
-  try {
-    await AsyncStorage.removeItem(key);
-  } catch {
-    // ignore
-  }
+export async function hasPasscode() {
+  await removeLegacyVerifier();
+  return Boolean(await readVerifier());
 }
 
-/** Lightweight hash for mock storage — replace with SecureStore + proper KDF later. */
-function hashPasscode(passcode: string): string {
-  let h = 2166136261;
-  const salted = `finora.passcode.v1:${passcode}`;
-  for (let i = 0; i < salted.length; i++) {
-    h ^= salted.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0).toString(16).padStart(8, '0');
+export async function setPasscode(passcode: string) {
+  if (!/^\d{6}$/.test(passcode)) throw new Error(`Passcode must be ${PASSCODE_LENGTH} digits.`);
+  const storageKey = userStorageKey(VERIFIER_KEY);
+  const userId = getActiveUserId();
+  if (!(await secureStoreAvailable())) throw new Error('Secure passcode storage is unavailable.');
+  const salt = Crypto.randomUUID();
+  const verifier: PasscodeVerifier = {
+    version: 2,
+    salt,
+    digest: await digestPasscode(passcode, salt),
+  };
+  if (getActiveUserId() !== userId) throw new Error('Account changed while setting passcode.');
+  await SecureStore.setItemAsync(storageKey, JSON.stringify(verifier), {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+  await removeLegacyVerifier();
+  notifyPasscodeChanged();
 }
 
-export async function hasPasscode(): Promise<boolean> {
-  const value = await getItem(KEY);
-  return Boolean(value);
+export async function verifyPasscode(passcode: string) {
+  const verifier = await readVerifier();
+  if (!verifier) return false;
+  return verifier.digest === (await digestPasscode(passcode, verifier.salt));
 }
 
-export async function setPasscode(passcode: string): Promise<void> {
-  if (!/^\d+$/.test(passcode) || passcode.length !== PASSCODE_LENGTH) {
-    throw new Error(`Passcode must be ${PASSCODE_LENGTH} digits.`);
-  }
-  await setItem(KEY, hashPasscode(passcode));
-}
-
-export async function verifyPasscode(passcode: string): Promise<boolean> {
-  const stored = await getItem(KEY);
-  if (!stored) return false;
-  return stored === hashPasscode(passcode);
-}
-
-export async function clearPasscode(): Promise<void> {
-  await removeItem(KEY);
+export async function clearPasscode() {
+  await SecureStore.deleteItemAsync(userStorageKey(VERIFIER_KEY)).catch(() => undefined);
+  await removeLegacyVerifier();
+  notifyPasscodeChanged();
 }
