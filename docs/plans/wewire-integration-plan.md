@@ -6,7 +6,7 @@
 
 The official docs expose an OpenAPI spec at `https://stage-capi.wewireafrica.com/endpoints/spec`. It contains 68 operations and 106 schemas. That spec disagrees with the current hand-written client in several places, so the client should not be treated as authoritative. Examples: the live sub-customer purpose enum is `PAYOUT | COLLECTION`, onboarding is `DRAFT | IN_REVIEW | REJECTED | RESUBMISSION | APPROVED`, transaction types are only `DEBIT | CREDIT`, and purpose codes are `POP001` through `POP032`. Finora currently uses invented values for all four.
 
-One Finora platform business sits on WeWire. After a user completes signup and selects their Finora profile type, Finora provisions one matching WeWire sub-customer. Each user owns an isolated GHS, NGN, and USD wallet set and completes their own KYC through a post-signup flow. Payroll is funded directly from Finora’s business wallet rather than creating intermediate employee balances.
+One Finora platform business sits on WeWire. After a user completes signup and selects an immutable Finora profile type (`INDIVIDUAL`, `SOLE_PROPRIETORSHIP`, or `BUSINESS`), Finora provisions one matching WeWire sub-customer. Each user owns isolated wallets, starts with GHS, and adds NGN or USD on request. USD is available for international payouts from day one once KYC permits money movement. Each user completes their own post-signup KYC flow.
 
 ## Architecture
 
@@ -30,11 +30,11 @@ Reads and previews can hit WeWire immediately. Execution calls happen only insid
 - Generate or derive typed schemas from the official OpenAPI document rather than maintaining guesses by hand.
 - Replace stale shared enums (`SubCustomerPurpose`, `SubCustomerOnboardingStatus`, wallet transaction enums, `PurposeCode`) with WeWire’s real values plus explicit Finora presentation mappings where needed.
 - Add a `WW_MODE=sandbox|production|mock` setting. Keep mock mode working so demos remain honest and sandbox credentials are never implied to be production rails.
-- Introduce a single API helper that resolves the current Clerk user, finds their linked WeWire sub-customer, and returns both database records and the typed client. Signup provisions the link after the user chooses a profile type.
+- Introduce a single API helper that resolves the current Clerk user, finds their linked WeWire sub-customer, and returns both database records and the typed client. Signup provisions the link after the user chooses an immutable profile type.
 
 ### Phase 1: identity and wallets
 
-Map each authenticated Finora profile to one active WeWire sub-customer using a stable `referenceId` derived from the Finora user ID. Start with GHS, NGN, and USD wallets. Treat wallets as read-only until that user’s KYC reaches the provider state required for money movement.
+Map each authenticated Finora profile to one active WeWire sub-customer using a stable `referenceId` derived from the Finora user ID. Provision GHS immediately and create NGN or USD only when the user requests that currency. Allow account reads before KYC, but block funding, payouts, conversions, transfers, and withdrawals until WeWire returns `APPROVED`. Support individual, sole-proprietorship, and general-business onboarding; make the selected type immutable after provisioning.
 
 Add these tables:
 
@@ -58,7 +58,7 @@ This phase gives the app a real financial account without moving money.
 - Replace fake bank/mobile-money lookup handlers with `GET /v1/account-lookup`.
 - Use `GET /v1/banks?currency=GHS|NGN` instead of hard-coded banks.
 - Implement beneficiary CRUD against `/v1/beneficiaries`, preserving Finora contact metadata locally and WeWire IDs remotely.
-- Call `GET /v1/rates`, `GET /v1/rates/pair`, `POST /v1/rates/conversion/preview`, and `POST /v1/fees/payout` for quotes and fee previews. Gate GHS and NGN local payouts ahead of USD international payouts.
+- Call `GET /v1/rates`, `GET /v1/rates/pair`, `POST /v1/rates/conversion/preview`, and `POST /v1/fees/payout` for quotes and fee previews.
 - Persist quote snapshots on preparations because WeWire conversion previews do not appear to return an executable quote token. Recheck the rate at execution and fail safely if the user approved materially different economics.
 
 ### Phase 3: approvals and money movement
@@ -96,7 +96,7 @@ Collections are a separate flow. Do not overload disbursement approvals for them
 
 Implement individual KYC submission and hosted links first.
 
-Then implement business KYC:
+Then implement sole-proprietorship and general-business KYC:
 
 1. Read requirements.
 2. Submit company details.
@@ -105,7 +105,7 @@ Then implement business KYC:
 5. Submit for review.
 6. Reflect `DRAFT`, `IN_REVIEW`, `RESUBMISSION`, `APPROVED`, and `REJECTED` accurately.
 
-Each user completes their own KYC in the post-signup flow. Profile type determines whether Finora collects individual data or business data plus beneficial owners. Sweeping and auto-sweep should follow once users can hold funded wallets.
+Each user completes their own KYC in the post-signup flow. Immutable profile type determines whether Finora collects individual data, sole-proprietorship data, or business data plus beneficial owners. Sweeping and auto-sweep should follow once users can hold funded wallets.
 
 ## Suggested first slice
 
@@ -122,7 +122,9 @@ The first demo-worthy milestone is a sandbox user whose wallet balance comes fro
 ## Resolved decisions
 
 - Provision each user’s WeWire sub-customer immediately after signup and profile-type selection.
-- Launch with GHS, NGN, and USD user wallets.
+- Make profile type immutable across `INDIVIDUAL`, `SOLE_PROPRIETORSHIP`, and `BUSINESS`.
+- Launch with GHS immediately and provision NGN or USD on request.
+- Treat USD as an international payout currency from day one, subject to KYC approval.
 - Fund payroll directly from the Finora business wallet.
 - Treat polling as authoritative until WeWire confirms webhook availability for our account.
-- Give every user their own post-signup KYC flow; profile type controls whether it requests individual or business data.
+- Give every user their own post-signup KYC flow; allow provider reads before approval and block all money movement until approval.
