@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
+import {
+  isUserStorageKeyWritable,
+  isUserStorageOperationBlocked,
+  userStorageKey,
+} from './session-storage';
 import { serializeStorageMutation } from './storage-mutation';
 
 export type SmsPaymentRequest = {
@@ -109,6 +113,8 @@ export async function markSmsRequestPaid(
     const next = requests.map((request) =>
       request.id === id ? { ...request, status: 'paid' as const, transactionId } : request,
     );
+    if (isUserStorageOperationBlocked(storageKey))
+      throw new Error('Account changed during payment.');
     await setItem(storageKey, JSON.stringify(next));
     return next.find((request) => request.id === id) ?? null;
   });

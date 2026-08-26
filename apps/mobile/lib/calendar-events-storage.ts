@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
+import {
+  isUserStorageKeyWritable,
+  isUserStorageOperationBlocked,
+  userStorageKey,
+} from './session-storage';
 import { serializeStorageMutation } from './storage-mutation';
 
 export type CalendarMoneyEventKind = 'rent' | 'payroll' | 'bill' | 'subscription' | 'other';
@@ -125,6 +129,8 @@ export async function markCalendarEventPaid(
     const next = events.map((event) =>
       event.id === id ? { ...event, status: 'paid' as const, transactionId } : event,
     );
+    if (isUserStorageOperationBlocked(storageKey))
+      throw new Error('Account changed during payment.');
     await setItem(storageKey, JSON.stringify(next));
     return next.find((event) => event.id === id) ?? null;
   });

@@ -12,7 +12,11 @@ import {
   type TransactionStatus,
 } from '@/components/activity/types';
 
-import { isUserStorageKeyWritable, userStorageKey } from './session-storage';
+import {
+  isUserStorageKeyWritable,
+  isUserStorageOperationBlocked,
+  userStorageKey,
+} from './session-storage';
 import { serializeStorageMutation } from './storage-mutation';
 
 const BASE_KEY = 'finora.transactions.v1';
@@ -66,6 +70,7 @@ export async function upsertTransaction(tx: Transaction): Promise<Transaction> {
     );
     if (idx >= 0 && txs[idx]?.wewireId === tx.wewireId) return txs[idx]!;
     const next = idx >= 0 ? txs.map((item, i) => (i === idx ? tx : item)) : [tx, ...txs];
+    if (isUserStorageOperationBlocked(storageKey)) throw new Error('Account changed during write.');
     await setItem(storageKey, JSON.stringify(next));
     return tx;
   });
@@ -104,8 +109,7 @@ export async function recordSentPayment(input: {
     timeline: buildTransactionTimeline(status, now),
   };
 
-  await upsertTransaction(tx);
-  return tx;
+  return upsertTransaction(tx);
 }
 
 /** Record an inbound funding credit (VA / MoMo / crypto / MoMo pull). */
@@ -141,8 +145,7 @@ export async function recordReceivedFunding(input: {
     timeline: buildTransactionTimeline('completed', now),
   };
 
-  await upsertTransaction(tx);
-  return tx;
+  return upsertTransaction(tx);
 }
 
 export async function clearTransactions(): Promise<void> {

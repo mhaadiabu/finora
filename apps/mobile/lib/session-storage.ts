@@ -50,6 +50,11 @@ export function isUserStorageKeyWritable(storageKey: string) {
   return Boolean(activeUserId && !blockedUserIds.has(activeUserId) && storageKey.endsWith(suffix));
 }
 
+/** Reject a queued operation when its account can no longer persist changes. */
+export function isUserStorageOperationBlocked(storageKey: string) {
+  return !isUserStorageKeyWritable(storageKey);
+}
+
 /** Stop writes started by the current account before its local data is removed. */
 export function blockActiveUserStorageWrites() {
   if (activeUserId) blockedUserIds.add(activeUserId);
