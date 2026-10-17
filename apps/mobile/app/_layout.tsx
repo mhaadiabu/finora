@@ -94,6 +94,7 @@ import {
 } from '@/lib/remote-thread-adapter';
 import { setActiveUserId } from '@/lib/session-storage';
 import { SettingsProvider } from '@/lib/settings-context';
+import { useClerkUserRefresh } from '@/lib/use-clerk-user-refresh';
 import { useDrainPendingPaymentLink } from '@/lib/use-drain-pending-payment-link';
 import { useProfileSync } from '@/lib/use-profile-sync';
 
@@ -473,6 +474,7 @@ function RootApp() {
 
 function ProfileSyncBridge() {
   useProfileSync();
+  useClerkUserRefresh();
   return null;
 }
 

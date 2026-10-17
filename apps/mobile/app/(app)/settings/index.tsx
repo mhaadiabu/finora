@@ -118,6 +118,7 @@ export default function SettingsHubScreen() {
             displayName={settings.displayName}
             foregroundColor={colors.foreground}
             imageUrl={user?.imageUrl}
+            imageVersion={user?.updatedAt ? String(user.updatedAt) : null}
             seed={user?.id ?? settings.email}
             size={52}
           />

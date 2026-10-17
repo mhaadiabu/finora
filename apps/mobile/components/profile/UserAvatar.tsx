@@ -12,6 +12,8 @@ type UserAvatarProps = {
   displayName: string;
   foregroundColor: string;
   imageUrl?: string | null;
+  /** Bump when the underlying OAuth avatar changes so expo-image refetches the same URL. */
+  imageVersion?: string | null;
   seed: string;
   size: number;
 };
@@ -22,6 +24,7 @@ export function UserAvatar({
   displayName,
   foregroundColor,
   imageUrl,
+  imageVersion,
   seed,
   size,
 }: UserAvatarProps) {
@@ -54,7 +57,10 @@ export function UserAvatar({
     >
       {imageUrl ? (
         <Image
-          source={imageUrl}
+          source={{
+            uri: imageUrl,
+            ...(imageVersion ? { cacheKey: `finora-user-avatar:${imageVersion}` } : {}),
+          }}
           className='absolute inset-0'
           style={StyleSheet.absoluteFill}
           contentFit='cover'
